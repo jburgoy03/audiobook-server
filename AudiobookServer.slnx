@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AudiobookServer.Api/AudiobookServer.Api.csproj" />
+    <Project Path="src/AudiobookServer.Core/AudiobookServer.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AudiobookServer.Tests/AudiobookServer.Tests.csproj" />
+  </Folder>
+</Solution>
