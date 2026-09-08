@@ -7,6 +7,7 @@ namespace AudiobookServer.Core.Scanning;
 
 /// <summary>A fully described book, not yet attached to a library or persisted.</summary>
 public record ScannedBook(
+    string Key,
     string Title,
     string? Author,
     string? Narrator,
@@ -16,12 +17,17 @@ public record ScannedBook(
 
 public interface IBookScanner
 {
-    Task<ScannedBook?> ScanAsync(BookCandidate candidate, string libraryRoot, CancellationToken ct = default);
+    /// <summary>
+    /// Usually returns one book. A directory whose files disagree about their album
+    /// is a collection, and yields one book per album.
+    /// </summary>
+    Task<IReadOnlyList<ScannedBook>> ScanAsync(
+        BookCandidate candidate, string libraryRoot, CancellationToken ct = default);
 }
 
 public partial class BookScanner(IMediaProbe probe) : IBookScanner
 {
-    public async Task<ScannedBook?> ScanAsync(
+    public async Task<IReadOnlyList<ScannedBook>> ScanAsync(
         BookCandidate candidate, string libraryRoot, CancellationToken ct = default)
     {
         var probed = new List<ProbedFile>();
@@ -40,9 +46,46 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         }
 
         if (probed.Count == 0)
-            return null;
+            return [];
 
-        var ordered = OrderFiles(probed);
+        var directoryName = Path.GetFileName(candidate.DirectoryPath);
+        var directoryKey = Path.GetRelativePath(libraryRoot, candidate.DirectoryPath);
+
+        return GroupIntoBooks(probed)
+            .Select(group => BuildBook(group, directoryName, directoryKey, libraryRoot))
+            .ToList();
+    }
+
+    private sealed record BookGroup(string? Album, List<ProbedFile> Files);
+
+    /// <summary>
+    /// One directory normally means one book. When the files disagree about which
+    /// album they belong to, the tagger is telling us the folder holds a collection,
+    /// so each album becomes its own book. Uniform album tags stay one book even when
+    /// the titles look like separate volumes — the tags are the assertion we trust.
+    /// </summary>
+    private static List<BookGroup> GroupIntoBooks(List<ProbedFile> probed)
+    {
+        var distinctAlbums = probed
+            .Select(p => p.Tag("album"))
+            .Where(a => a is not null)
+            .Select(a => a!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        if (distinctAlbums <= 1)
+            return [new BookGroup(null, probed)];
+
+        return probed
+            .GroupBy(p => p.Tag("album") ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new BookGroup(g.Key.Length == 0 ? null : g.Key, g.ToList()))
+            .ToList();
+    }
+
+    private static ScannedBook BuildBook(
+        BookGroup group, string directoryName, string directoryKey, string libraryRoot)
+    {
+        var ordered = OrderFiles(group.Files);
 
         var files = new List<AudioFile>();
         var chapters = new List<Chapter>();
@@ -96,10 +139,13 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         }
 
         var first = ordered[0];
+        var album = group.Album ?? first.Tag("album");
 
         return new ScannedBook(
-            Title: CleanTitle(first.Tag("album")) ?? Path.GetFileName(candidate.DirectoryPath),
-            Author: first.Tag("artist") ?? AuthorFromDirectoryName(Path.GetFileName(candidate.DirectoryPath)),
+            // Split books need distinct keys, since they share a directory.
+            Key: group.Album is null ? directoryKey : $"{directoryKey}#{group.Album}",
+            Title: CleanTitle(album) ?? directoryName,
+            Author: first.Tag("artist") ?? AuthorFromDirectoryName(directoryName),
             Narrator: first.Tag("composer") ?? first.Tag("narrator"),
             DurationSeconds: offset,
             Files: files,
