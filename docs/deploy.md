@@ -85,13 +85,38 @@ hostname.** Cloudflare gives up on a request after 100 seconds (524), and the sc
 runs on the request's cancellation token, so it would be cancelled partway. This
 holds until scanning moves to a background service.
 
+Signed in as an admin (library endpoints are admin-only). Pick the library by name,
+since there's more than one:
+
 ```
-const [lib] = await (await fetch('/api/libraries')).json(); await (await fetch(`/api/libraries/${lib.id}/scan?force=true`, { method: 'POST' })).json()
+const lib = (await (await fetch('/api/libraries')).json()).find(l => l.name === 'Audiobooks'); await (await fetch(`/api/libraries/${lib.id}/scan?force=true`, { method: 'POST' })).json()
 ```
 
 `force=true` re-probes unchanged files. Use it after scanner changes (durations,
 covers); a plain scan skips files whose mtime hasn't changed. The request returns
 when the scan finishes (minutes: mp3 packet counting reads every file in full).
+
+## The public-domain library
+
+LibriVox recordings live in `/mnt/media/librivox`, one folder per book, mounted
+read-only like the main library. The library row has `isPublic: true`, so every
+signed-in user sees these books; the main library stays admin-only.
+
+Fetch books with `scripts/librivox-fetch.py` (mp3s and the cover only; it skips the
+per-track spectrogram PNGs, which would otherwise compete to be the cover):
+
+```
+python3 scripts/librivox-fetch.py /mnt/media/librivox "IDENTIFIER=Title - Author"
+```
+
+Registered once, from the console on the Tailscale address:
+
+```
+await (await fetch('/api/libraries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'LibriVox', rootPath: '/mnt/media/librivox', isPublic: true, credit: 'Public domain · LibriVox' }) })).json()
+```
+
+Make a library public or private later with
+`PATCH /api/libraries/{id}` and `{ "isPublic": false }`.
 
 ## Checks
 

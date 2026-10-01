@@ -24,6 +24,9 @@ services:
       # path as on the host, because Libraries.RootPath in the database already
       # says /mnt/media/audiobooks (it was scanned outside a container).
       - /mnt/media/audiobooks:/mnt/media/audiobooks:ro
+      # Public-domain recordings (LibriVox), registered as a public library. A
+      # separate folder, so whether a book is public is decided by where it lives.
+      - /mnt/media/librivox:/mnt/media/librivox:ro
       # Covers and data-protection keys.
       - audiobook-data:/data
     ports:
