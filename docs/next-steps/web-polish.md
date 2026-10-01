@@ -2,6 +2,9 @@
 
 Small, independent fixes to the web client in `web/`. Status as of 2026-10-01.
 
+Auth, the sign-in page, synced progress and the jump offer are covered in
+[`auth-sync-deploy.md`](auth-sync-deploy.md), not here.
+
 ## Done (2026-10-01)
 
 ### Layout
@@ -64,18 +67,10 @@ leather) read as costume. The current direction:
 - Lint clean. The two `set-state-in-effect` errors were fixed by restructuring
   (book page keyed by id; resume position as initial state), not suppressed.
 
-## Before committing: cleanup
+## Cleanup: done
 
-Claude's folder access can't delete files, so these are manual (repo root, one at
-a time):
-
-1. The first font install landed in the repo root: delete `package.json`,
-   `package-lock.json` and `node_modules/` there (all untracked).
-2. Unused fonts: `npm uninstall --prefix web @fontsource-variable/literata @fontsource-variable/figtree`.
-3. `git rm web/public/icons.svg` (Vite's template sprite, unreferenced).
-4. Delete `web/src/main.tsx.new` (empty, untracked, created by mistake).
-
-Then a final `npm run lint` and `npm run build` in `web/` before committing.
+The stray root `package.json`/`node_modules`, the unused Literata and Figtree
+fonts, `web/public/icons.svg` and `web/src/main.tsx.new` are all gone.
 
 ## Remaining
 
@@ -89,11 +84,14 @@ Then a final `npm run lint` and `npm run build` in `web/` before committing.
    `ffprobe -show_format` on a file of each and check `album_artist`, `performer`,
    `comment` before extending the precedence in `BookScanner`. Otherwise this waits
    for metadata enrichment (2g).
-3. **Cover art quality.** The Name of the Wind's embedded art is 175x175 with
-   black bars baked in. Reading `cover.jpg`/`folder.jpg` from the book directory
-   (largest image wins) would fix it ahead of 2g.
-4. **First-visit library.** With nothing started (the public demo), there is no
-   featured book. Consider featuring a suggestion or the most recently added book.
+3. **Folder cover images. Now the priority item.** Read `cover.jpg`/`folder.jpg`
+   (and other images) from the book directory, largest image wins, ahead of 2g.
+   Needed for LibriVox (covers ship as separate files) and Lord of the Rings (no
+   art anywhere), and it fixes The Name of the Wind's 175x175 embedded art with
+   baked-in black bars. This is a scanner change in `Core`, not a web change.
+4. **First-visit library.** With nothing started (every new user of the public
+   library), there is no featured book. Feature a suggestion or the most recently
+   added book.
 5. **Auto-scroll on tablet and phone.** The chapter list follows playback only on
    desktop. A "Jump to current chapter" control in the stacked layout would cover it.
 6. **Full visual pass at 768 and 375** in the new design. Checked at 1024 so far.
@@ -104,12 +102,14 @@ Then a final `npm run lint` and `npm run build` in `web/` before committing.
 
 - Dev needs three things running: `docker compose up -d` (Postgres),
   `dotnet run --project src/AudiobookServer.Api`, and `npm run dev` in `web/`.
-  Open http://localhost:5173.
+  Open http://localhost:5173 and sign in (the account comes from the
+  `Auth:SeedUser:*` user-secrets).
 - **Vite's file watcher does not see files written through Claude's remote folder
   access.** After Claude edits files in `web/`, restart `npm run dev`. A possible
   fix: `server.watch.usePolling` in `vite.config.ts` (costs some CPU; node_modules
   is already excluded from watching).
 - **Run npm in `web/`, or pass `--prefix web`.** From the repo root, a plain
   `npm install` creates a stray `package.json` there.
-- Browser storage is per browser profile: the Claude app's built-in browser and your
-  own browser keep separate positions.
+- Positions sync through the server now. Browser storage is only their offline
+  cache, plus the speed setting and the per-browser device ID. Two browsers count
+  as two devices, which is the easiest way to test the jump offer.
