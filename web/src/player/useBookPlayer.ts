@@ -1,20 +1,34 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import type { BookDetail } from '../api/types'
+import { verifySession } from '../auth/auth'
+import { progressStore } from './progress'
+import { deviceId, loadRate, saveRate } from './storage'
 import { chapterIndexAt, clampPosition, locate, totalDuration } from './timeline'
-import { loadPosition, loadRate, savePosition, saveRate } from './storage'
 
 const SAVE_INTERVAL_MS = 30_000
 
-// Within this many seconds of the end, a saved position counts as finished and
-// the book reopens at the start rather than on the last few seconds.
-const FINISHED_MARGIN_SECONDS = 5
+// How far ahead another device must be before it's worth offering a jump. Saves
+// happen every 30s, so anything less is ordinary lag between two devices.
+const JUMP_THRESHOLD_SECONDS = 30
 
-/** Where this browser left off, or the start if the book was finished. */
+/**
+ * Where this browser left off (or, for a book only played elsewhere, where the
+ * server has it), or the start if the book is finished. Finished is the server's
+ * state, set when a book plays to its end, not a guess from the position.
+ */
 export function resumePosition(book: BookDetail) {
-  const start = loadPosition(book.id) ?? 0
-  if (start >= totalDuration(book.files) - FINISHED_MARGIN_SECONDS) return 0
-  return clampPosition(book.files, start)
+  const point = progressStore.resumePoint(book.id)
+  if (!point || point.isFinished) return 0
+  return clampPosition(book.files, point.position)
+}
+
+/** Another device is further along in this book; the listener decides whether to jump. */
+export interface JumpOffer {
+  position: number
+  deviceName: string | null
+  /** Identifies the server state being offered, so an answered offer isn't repeated. */
+  reportedAt: string
 }
 
 /**
@@ -58,7 +72,56 @@ export function useBookPlayer(
     setPosition(value)
   }, [])
 
-  const save = useCallback(() => savePosition(book.id, positionRef.current), [book.id])
+  // Set when the last file ends; cleared by any seek or play. Sent with every save,
+  // so the server's IsFinished is what decides "finished" everywhere.
+  const finishedRef = useRef(false)
+
+  // Sync state for this activation. `reconciled`: the server's position has been
+  // compared with ours since the book started, so our reports can be overrides
+  // (this device is playing, and is authoritative). `answered`: the server state
+  // the listener has already said yes or no to, or chose over by starting at an
+  // explicit point. While an offer is open, reports are ordinary (furthest-wins),
+  // so they can't overwrite the other device before the listener decides.
+  const [offer, setOffer] = useState<JumpOffer | null>(null)
+  const offerRef = useRef<JumpOffer | null>(null)
+  const reconciledRef = useRef(false)
+  const answeredRef = useRef<string | null>(null)
+  const lastSavedRef = useRef<{ position: number; finished: boolean } | null>(null)
+
+  const save = useCallback(
+    (keepalive = false) => {
+      const position = positionRef.current
+      const finished = finishedRef.current
+      // Skip a save that would say nothing new. Beyond saving requests, this
+      // matters: a paused tab that saved on every visibility change would keep
+      // re-asserting an old position as the newest, over a phone that moved on.
+      const last = lastSavedRef.current
+      if (last && Math.abs(last.position - position) < 0.5 && last.finished === finished) return
+      lastSavedRef.current = { position, finished }
+      void progressStore.report(book.id, position, {
+        isFinished: finished,
+        override: reconciledRef.current && offerRef.current === null,
+        keepalive,
+      })
+    },
+    [book.id],
+  )
+
+  /**
+   * Compares the server's position with ours and offers a jump if another device
+   * is meaningfully ahead. Never moves playback itself.
+   */
+  const reconcile = useCallback(() => {
+    if (!progressStore.isLoaded()) return
+    reconciledRef.current = true
+    const server = progressStore.get(book.id)?.server
+    if (!server || server.deviceId === deviceId() || server.isFinished) return
+    if (server.reportedAt === answeredRef.current || server.reportedAt === offerRef.current?.reportedAt) return
+    if (server.position <= positionRef.current + JUMP_THRESHOLD_SECONDS) return
+    const next = { position: server.position, deviceName: server.deviceName, reportedAt: server.reportedAt }
+    offerRef.current = next
+    setOffer(next)
+  }, [book.id])
 
   /** Points the element at a file and queues the offset (and play) for when metadata arrives. */
   const loadFile = useCallback(
@@ -113,6 +176,7 @@ export function useBookPlayer(
       } else {
         updatePosition(totalDuration(book.files))
         setPlaying(false)
+        finishedRef.current = true
         save()
       }
     }
@@ -128,6 +192,9 @@ export function useBookPlayer(
       setLoading(false)
       setPlaying(false)
       setError(`Could not load file ${fileIndexRef.current + 1} of ${book.files.length}.`)
+      // A media element's error doesn't say why. If it was a 401 (the session
+      // expired mid-book), this signs the app out, which stops this player.
+      void verifySession()
     }
 
     audio.addEventListener('loadedmetadata', onLoadedMetadata)
@@ -144,7 +211,8 @@ export function useBookPlayer(
     loadFile(index, offset, autoplayOnLoad)
 
     // Leaving the page or switching tabs is the last reliable moment to save.
-    const onHide = () => save()
+    // keepalive lets the request outlive the page.
+    const onHide = () => save(true)
     window.addEventListener('pagehide', onHide)
     document.addEventListener('visibilitychange', onHide)
 
@@ -167,6 +235,28 @@ export function useBookPlayer(
     }
   }, [book.id, book.files, loadFile, save, updatePosition, autoplayOnLoad])
 
+  // Unmounting (another book activated, or signing out) saves synchronously in the
+  // commit, not later with the passive effect above: sign-out waits for this save
+  // to reach the server before ending the session.
+  const saveRef = useRef(save)
+  useLayoutEffect(() => {
+    saveRef.current = save
+  })
+  useLayoutEffect(() => () => saveRef.current(true), [])
+
+  // Compare with the server once when the book starts (or as soon as the server's
+  // state arrives), then whenever it changes: a refresh when the tab becomes
+  // visible again may show another device moved on while this one sat paused.
+  // A book started at an explicit point (a chapter, a scrub) has had its answer:
+  // the listener chose where to be.
+  useEffect(() => {
+    if (startAt !== undefined) answeredRef.current = progressStore.get(book.id)?.server?.reportedAt ?? null
+    reconcile()
+    return progressStore.subscribe(reconcile)
+    // startAt is read once, like the rest of the initial state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.id, reconcile])
+
   // Periodic save while playing, so a crash or killed tab loses at most 30s.
   useEffect(() => {
     if (!playing) return
@@ -181,6 +271,7 @@ export function useBookPlayer(
       const t = clampPosition(book.files, target)
       const { index, offset } = locate(book.files, t)
 
+      finishedRef.current = false
       if (index === fileIndexRef.current) {
         if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) audio.currentTime = offset
         else pendingSeekRef.current = offset
@@ -198,6 +289,7 @@ export function useBookPlayer(
     const audio = audioRef.current
     if (!audio) return
     if (audio.paused) {
+      reconcile()
       // At the very end, play means start over.
       if (positionRef.current >= totalDuration(book.files) - 0.5) {
         seek(0)
@@ -206,7 +298,29 @@ export function useBookPlayer(
     } else {
       audio.pause()
     }
-  }, [book.files, seek])
+  }, [book.files, seek, reconcile])
+
+  /** Goes to where the other device is. From here on, this device's reports override. */
+  const acceptOffer = useCallback(() => {
+    const current = offerRef.current
+    if (!current) return
+    answeredRef.current = current.reportedAt
+    offerRef.current = null
+    setOffer(null)
+    seek(current.position)
+    save()
+  }, [seek, save])
+
+  /** Stays here, and says so to the server: this position overrides the other device's. */
+  const dismissOffer = useCallback(() => {
+    const current = offerRef.current
+    if (!current) return
+    answeredRef.current = current.reportedAt
+    offerRef.current = null
+    setOffer(null)
+    lastSavedRef.current = null
+    save()
+  }, [save])
 
   const setRate = useCallback((value: number) => {
     const audio = audioRef.current
@@ -318,6 +432,9 @@ export function useBookPlayer(
     seekChapter,
     previousChapter,
     nextChapter,
+    offer,
+    acceptOffer,
+    dismissOffer,
   }
 }
 

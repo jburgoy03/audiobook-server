@@ -1,0 +1,124 @@
+using AudiobookServer.Core.Data;
+using AudiobookServer.Core.Entities;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Identity;
+
+namespace AudiobookServer.Api.Auth;
+
+/// <summary>
+/// One user, two kinds of client.
+///
+/// The web client authenticates with a cookie. Its media elements (&lt;audio src&gt;,
+/// &lt;img src&gt;) can't attach an Authorization header, but they do send cookies, and
+/// the client is always same-origin (Vite's proxy in development, served by this API
+/// in production), so a SameSite=Strict, HttpOnly cookie covers every request it makes.
+///
+/// The Android client sends bearer tokens. Media3 can attach headers to its requests,
+/// so it doesn't need cookies.
+///
+/// A policy scheme picks between them per request: an "Authorization: Bearer" header
+/// means the bearer scheme, anything else means the cookie.
+///
+/// Tokens are Identity's own (AddBearerToken), not JWTs: opaque, protected with the
+/// same data-protection keys as the cookie, and refreshable with a check of the user's
+/// security stamp (so changing the password revokes them). That trades away
+/// third-party verifiability, which nothing here needs, for not hand-rolling refresh
+/// token storage and rotation.
+/// </summary>
+public static class AuthSetup
+{
+    public const string CookieOrBearer = "CookieOrBearer";
+
+    public static IServiceCollection AddAudiobookAuth(
+        this IServiceCollection services, IConfiguration config, IHostEnvironment env)
+    {
+        // Cookies and tokens are both encrypted with these keys. Kept in memory they would
+        // change on every restart and sign everyone out, so they're persisted: under
+        // data/keys locally, and on a volume in a container (DataProtection:KeysDirectory).
+        var keysDirectory = config["DataProtection:KeysDirectory"]
+            ?? Path.Combine(env.ContentRootPath, "data", "keys");
+        services.AddDataProtection()
+            .SetApplicationName("AudiobookServer")
+            .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
+
+        services
+            .AddAuthentication(o =>
+            {
+                o.DefaultScheme = CookieOrBearer;
+                o.DefaultChallengeScheme = CookieOrBearer;
+            })
+            .AddPolicyScheme(CookieOrBearer, "Cookie or bearer token", o =>
+            {
+                o.ForwardDefaultSelector = ctx =>
+                    ctx.Request.Headers.Authorization.ToString()
+                        .StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                        ? IdentityConstants.BearerScheme
+                        : IdentityConstants.ApplicationScheme;
+            })
+            .AddBearerToken(IdentityConstants.BearerScheme, o =>
+            {
+                o.BearerTokenExpiration = TimeSpan.FromHours(1);
+                o.RefreshTokenExpiration = TimeSpan.FromDays(30);
+            })
+            .AddIdentityCookies();
+
+        // After AddIdentityCookies, which sets up the cookie's Events (including the
+        // security-stamp check); this only changes properties on them.
+        services.ConfigureApplicationCookie(o =>
+        {
+            o.Cookie.Name = "audiobook.auth";
+            o.Cookie.HttpOnly = true;
+            o.Cookie.SameSite = SameSiteMode.Strict;
+            // Secure whenever the request was HTTPS. Behind Cloudflare that's decided by
+            // X-Forwarded-Proto (see UseForwardedHeaders). "Always" would break plain
+            // HTTP over Tailscale, where browsers refuse to store a Secure cookie.
+            o.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            o.ExpireTimeSpan = TimeSpan.FromDays(30);
+            o.SlidingExpiration = true;
+
+            // An API answers 401/403. The defaults redirect to /Account/Login, which
+            // would turn every unauthenticated fetch into a 302 to a page that
+            // doesn't exist.
+            o.Events.OnRedirectToLogin = ctx =>
+            {
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return Task.CompletedTask;
+            };
+            o.Events.OnRedirectToAccessDenied = ctx =>
+            {
+                ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            };
+        });
+
+        services
+            .AddIdentityCore<User>(o =>
+            {
+                // One person, choosing a passphrase: length is what matters, and
+                // character-class rules mostly produce "Password1!".
+                o.Password.RequiredLength = 12;
+                o.Password.RequireDigit = false;
+                o.Password.RequireLowercase = false;
+                o.Password.RequireUppercase = false;
+                o.Password.RequireNonAlphanumeric = false;
+
+                // The login endpoint will face the internet eventually.
+                o.Lockout.AllowedForNewUsers = true;
+                o.Lockout.MaxFailedAccessAttempts = 5;
+                o.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
+            })
+            .AddEntityFrameworkStores<AudiobookDbContext>()
+            .AddSignInManager();
+
+        // Secure by default: every endpoint needs a signed-in user unless it says
+        // otherwise. Login, refresh, logout and the web client's shell opt out.
+        services.AddAuthorizationBuilder()
+            .SetFallbackPolicy(new AuthorizationPolicyBuilder(CookieOrBearer)
+                .RequireAuthenticatedUser()
+                .Build());
+
+        return services;
+    }
+}

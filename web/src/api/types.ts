@@ -51,3 +51,48 @@ export interface BookDetail {
   files: BookFile[]
   chapters: Chapter[]
 }
+
+/** GET /api/auth/me */
+export interface CurrentUser {
+  username: string
+}
+
+/** What the server holds for one book: GET /api/progress, and inside a ProgressResult. */
+export interface ProgressDto {
+  bookId: string
+  positionSeconds: number
+  /** Client time when playback reached this point, not when the server stored it. */
+  reportedAt: string
+  updatedAt: string
+  deviceId: string | null
+  deviceName: string | null
+  isFinished: boolean
+}
+
+/** Body of POST /api/progress. */
+export interface ProgressReport {
+  bookId: string
+  positionSeconds: number
+  reportedAt: string
+  deviceId: string
+  deviceName: string
+  isFinished: boolean
+  /** "This position is deliberate": bypasses furthest-wins. See ProgressRules on the server. */
+  override: boolean
+}
+
+export type ProgressReason =
+  | 'first'
+  | 'override'
+  | 'sameDevice'
+  | 'finished'
+  | 'further'
+  | 'behind'
+  | 'behindFinished'
+
+/** Response of POST /api/progress. A rejection isn't an error: progress is what the server kept. */
+export interface ProgressResult {
+  accepted: boolean
+  reason: ProgressReason
+  progress: ProgressDto
+}

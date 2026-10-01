@@ -50,7 +50,7 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
             return [];
 
         var directoryName = Path.GetFileName(candidate.DirectoryPath);
-        var directoryKey = Path.GetRelativePath(libraryRoot, candidate.DirectoryPath);
+        var directoryKey = LibraryPaths.Relative(libraryRoot, candidate.DirectoryPath);
 
         return GroupIntoBooks(probed)
             .Select(group => BuildBook(group, directoryName, directoryKey, libraryRoot))
@@ -97,7 +97,7 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
             files.Add(new AudioFile
             {
                 Id = Guid.NewGuid(),
-                RelativePath = Path.GetRelativePath(libraryRoot, p.Path),
+                RelativePath = LibraryPaths.Relative(libraryRoot, p.Path),
                 Sequence = index,
                 StartOffsetSeconds = offset,
                 DurationSeconds = p.DurationSeconds,

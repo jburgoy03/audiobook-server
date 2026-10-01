@@ -1,0 +1,13 @@
+# Keep the build context to source: no build output, dependencies or secrets.
+**/bin/
+**/obj/
+**/node_modules/
+web/dist/
+src/AudiobookServer.Api/data/
+src/AudiobookServer.Api/wwwroot/
+.env
+.git/
+.vs/
+.vscode/
+tests/
+docs/

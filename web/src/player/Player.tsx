@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import type { BookDetail } from '../api/types'
 import { LevelMeter, NextIcon, PlayPauseIcon, PreviousIcon, SkipIcon } from '../components/Icons'
 import { ChapterTimeline } from './ChapterTimeline'
+import { JumpPrompt } from './JumpPrompt'
 import { useActivate, useLivePlayer, type Activate } from './nowPlaying'
+import { useProgressEntries } from './progress'
 import { loadRate, saveRate } from './storage'
 import { chapterIndexAt, clampPosition, formatTime, totalDuration } from './timeline'
 import { resumePosition, type BookPlayer } from './useBookPlayer'
@@ -39,9 +41,13 @@ function revealWithin(list: HTMLElement, item: HTMLElement) {
  * browser left off, and any action makes this book the active one from there.
  * Playing, or picking a chapter, starts it; scrubbing or skipping moves the
  * starting point and leaves it paused.
+ *
+ * Unlike the live player, this follows the progress store: an idle book is one
+ * a server refresh is allowed to update.
  */
 function useIdlePlayer(book: BookDetail, activate: Activate): BookPlayer {
-  const [position] = useState(() => resumePosition(book))
+  useProgressEntries()
+  const position = resumePosition(book)
   const [rate, setRateState] = useState(loadRate)
   const total = totalDuration(book.files)
   const chapterIndex = chapterIndexAt(book.chapters, position)
@@ -72,6 +78,9 @@ function useIdlePlayer(book: BookDetail, activate: Activate): BookPlayer {
     seekChapter: startChapter,
     previousChapter: () => startChapter(Math.max(0, chapterIndex - 1)),
     nextChapter: () => startChapter(Math.min(book.chapters.length - 1, chapterIndex + 1)),
+    offer: null,
+    acceptOffer: () => {},
+    dismissOffer: () => {},
   }
 }
 
@@ -153,6 +162,8 @@ export function Player({ book }: { book: BookDetail }) {
             </p>
           )}
         </div>
+
+        <JumpPrompt player={p} />
 
         <ChapterTimeline
           chapters={book.chapters}

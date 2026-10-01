@@ -810,6 +810,103 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
   .now-bar-controls .control:not(.now-bar-play) { width: 2.5rem; height: 2.5rem; }
 }
 
+/* ---------- Sign in, sign out ---------- */
+
+/* The wordmark on the frame's left edge, sign out on its right. */
+.masthead { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+
+.signout {
+  padding: 0.2rem 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1rem;
+  font-style: italic;
+  cursor: pointer;
+}
+
+/* One narrow column on the frame's left edge, like a title page. */
+.login { max-width: 24rem; margin: 3rem 0; }
+.login h1 { margin: 0 0 0.75rem; font-size: 2.25rem; font-style: italic; font-weight: 400; }
+.login > p { margin: 0 0 1rem; }
+.login-detail { font-size: 0.9375rem; overflow-wrap: anywhere; }
+.login-form { display: grid; gap: 1.25rem; margin-top: 2rem; }
+.login-form .resume { justify-self: start; margin-top: 0; }
+.login-form .resume:disabled { opacity: 0.6; cursor: default; }
+.login-error { min-height: 1.5em; margin: -0.5rem 0 0; color: var(--ink); font-style: italic; }
+
+.field { display: grid; gap: 0.35rem; }
+.field > span { color: var(--muted); font-size: 0.9375rem; }
+.field input {
+  padding: 0.4rem 0 0.45rem;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.25rem;
+  outline: none;
+  transition: border-color var(--release) var(--ease-out);
+}
+.field input:focus { border-bottom-color: var(--ink); }
+/* Keep autofill from painting the field pale yellow on a black page. */
+.field input:-webkit-autofill {
+  -webkit-text-fill-color: var(--ink);
+  box-shadow: 0 0 0 100px var(--page) inset;
+  caret-color: var(--ink);
+}
+
+/* ---------- Another device is further along ---------- */
+
+/*
+  A quiet line between the chapter title and the timeline, not a dialog: the
+  book keeps playing where it is until the listener picks. No red: the offer is
+  somewhere else's position, not this book's playhead.
+*/
+.jump {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 1rem 0 0.25rem;
+  padding: 0.6rem 0.6rem 0.6rem 1rem;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--raised);
+}
+.jump-text { margin: 0; }
+.jump-time { font-variant-numeric: lining-nums tabular-nums; }
+.jump-actions { display: flex; gap: 0.35rem; }
+.jump-go,
+.jump-stay {
+  padding: 0.35rem 0.9rem;
+  border: none;
+  border-radius: 999px;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition:
+    transform var(--release) var(--ease-out),
+    background-color var(--release) var(--ease-out),
+    opacity var(--release) var(--ease-out);
+}
+.jump-go { background: var(--ink); color: var(--page); font-weight: 600; }
+.jump-stay { background: transparent; color: var(--muted); }
+.jump-go:active,
+.jump-stay:active { transform: scale(0.95); transition-duration: var(--press); }
+.jump-go:active { opacity: 0.8; }
+.jump-stay:active { background: var(--press-tint); }
+
+.now-bar-offer .jump { margin: 0.6rem 0 0; background: rgb(235 230 220 / 0.04); }
+.now-bar-spacer[data-offer] { height: calc(9rem + env(safe-area-inset-bottom)); }
+
+@media (hover: hover) {
+  .signout:hover { color: var(--ink); }
+  .jump-go:hover { opacity: 0.88; }
+  .jump-stay:hover { background: var(--hover-tint); color: var(--ink); }
+}
+
 /* ---------- Interaction ---------- */
 
 /*

@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router'
+import { JumpPrompt } from '../player/JumpPrompt'
 import { useNowPlaying } from '../player/nowPlaying'
 import { formatTime } from '../player/timeline'
 import { Cover } from './Cover'
@@ -27,11 +28,18 @@ export function NowPlayingBar() {
   return (
     <>
       {/* Keeps the end of the page from being hidden under the bar. */}
-      <div className="now-bar-spacer" aria-hidden="true" />
+      <div className="now-bar-spacer" data-offer={p.offer ? '' : undefined} aria-hidden="true" />
       <section className="now-bar" aria-label="Now playing">
         <div className="now-bar-progress" aria-hidden="true">
           <span style={{ width: `${fraction * 100}%` }} />
         </div>
+        {/* Resume from the library starts the book here, off its own page, so
+            the offer to jump has to be reachable here too. */}
+        {p.offer && (
+          <div className="now-bar-offer frame">
+            <JumpPrompt player={p} />
+          </div>
+        )}
         <div className="now-bar-inner frame">
           <Link to={href} className="now-bar-book">
             <Cover bookId={book.id} title={book.title} hasCover={book.hasCover} className="now-bar-cover" />

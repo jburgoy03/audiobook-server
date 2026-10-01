@@ -6,7 +6,7 @@ import { Cover } from '../components/Cover'
 import { PlayPauseIcon } from '../components/Icons'
 import { ChapterTimeline } from '../player/ChapterTimeline'
 import { useActivate, useLivePlayer } from '../player/nowPlaying'
-import { loadSavedPosition } from '../player/storage'
+import { progressStore, useProgressEntries } from '../player/progress'
 import { chapterIndexAt } from '../player/timeline'
 
 /** "4h 12m", "38m". Rounded, because this is a glance, not a clock. */
@@ -20,27 +20,27 @@ function formatLength(seconds: number) {
 interface Progress {
   position: number
   fraction: number
-  savedAt: string
+  /** Latest activity from any device, for ordering. */
+  lastActivity: string
 }
 
-// A book counts as started after a minute, and as finished within its last few
-// seconds, matching the player's own resume rule.
+// A display rule, not sync state: a book counts as started after a minute.
+// Finished is the server's IsFinished, set when a book plays to its end.
 const STARTED_AFTER_SECONDS = 60
-const FINISHED_MARGIN_SECONDS = 5
 
 // The most recent book is featured; up to three more follow it, which fills one
 // row of the six-column grid (each takes two columns).
 const MAX_IN_PROGRESS = 4
 
+/** Where this browser would resume the book: the same point Resume plays from. */
 function progressFor(book: BookSummary): Progress | null {
-  const saved = loadSavedPosition(book.id)
-  if (!saved || book.durationSeconds <= 0) return null
-  if (saved.position < STARTED_AFTER_SECONDS) return null
-  if (saved.position >= book.durationSeconds - FINISHED_MARGIN_SECONDS) return null
+  const point = progressStore.resumePoint(book.id)
+  if (!point || book.durationSeconds <= 0) return null
+  if (point.isFinished || point.position < STARTED_AFTER_SECONDS) return null
   return {
-    position: saved.position,
-    fraction: saved.position / book.durationSeconds,
-    savedAt: saved.savedAt,
+    position: point.position,
+    fraction: point.position / book.durationSeconds,
+    lastActivity: point.lastActivity,
   }
 }
 
@@ -162,6 +162,9 @@ export function LibraryPage() {
     return () => controller.abort()
   }, [])
 
+  // Recomputed whenever the store changes: a refresh from the server can start,
+  // move or finish books here. (The active book shows its live position anyway.)
+  const entries = useProgressEntries()
   const progress = useMemo(() => {
     const map = new Map<string, Progress>()
     for (const book of books ?? []) {
@@ -169,13 +172,15 @@ export function LibraryPage() {
       if (p) map.set(book.id, p)
     }
     return map
-  }, [books])
+    // progressFor reads the store, whose snapshot is `entries`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [books, entries])
 
   const inProgress = useMemo(
     () =>
       (books ?? [])
         .filter((b) => progress.has(b.id))
-        .sort((a, b) => progress.get(b.id)!.savedAt.localeCompare(progress.get(a.id)!.savedAt))
+        .sort((a, b) => progress.get(b.id)!.lastActivity.localeCompare(progress.get(a.id)!.lastActivity))
         .slice(0, MAX_IN_PROGRESS),
     [books, progress],
   )

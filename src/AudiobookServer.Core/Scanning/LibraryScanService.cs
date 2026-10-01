@@ -52,7 +52,7 @@ public class LibraryScanService(
         {
             ct.ThrowIfCancellationRequested();
 
-            var directoryKey = Path.GetRelativePath(library.RootPath, candidate.DirectoryPath);
+            var directoryKey = LibraryPaths.Relative(library.RootPath, candidate.DirectoryPath);
             var splitPrefix = directoryKey + "#";
 
             try

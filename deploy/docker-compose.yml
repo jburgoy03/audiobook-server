@@ -1,0 +1,39 @@
+# The API on the server, Tailscale-only. Lives in /opt/docker/audiobook alongside
+# its .env (see .env.example and docs/deploy.md). The image is built from the
+# source checkout: docker build -t audiobook-server:latest ~/projects/audiobook
+#
+# Postgres is not part of this stack: it's the existing audiobook-db container,
+# reached over its compose network by container name.
+
+services:
+  api:
+    image: audiobook-server:latest
+    container_name: audiobook-api
+    restart: unless-stopped
+    environment:
+      ConnectionStrings__Postgres: "Host=audiobook-db;Port=5432;Database=audiobook;Username=audiobook;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+      # Creates the account on first start, only if no user exists yet.
+      Auth__SeedUser__Username: ${SEED_USERNAME:-}
+      Auth__SeedUser__Password: ${SEED_PASSWORD:-}
+    volumes:
+      # Read-only: the server never writes to the library. Mounted at the same
+      # path as on the host, because Libraries.RootPath in the database already
+      # says /mnt/media/audiobooks (it was scanned outside a container).
+      - /mnt/media/audiobooks:/mnt/media/audiobooks:ro
+      # Covers and data-protection keys.
+      - audiobook-data:/data
+    ports:
+      # Bound to the Tailscale address only: reachable from the tailnet, not the
+      # LAN or the internet. Public exposure goes through the Cloudflare Tunnel,
+      # later, for the LibriVox demo only.
+      - "${BIND_ADDRESS:?set BIND_ADDRESS to the server's Tailscale IP}:8080:8080"
+    networks:
+      - db
+
+networks:
+  db:
+    external: true
+    name: ${DB_NETWORK:-audiobook_default}
+
+volumes:
+  audiobook-data:

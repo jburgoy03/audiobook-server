@@ -1,12 +1,13 @@
+using Microsoft.AspNetCore.Identity;
+
 namespace AudiobookServer.Core.Entities;
 
-public class User
+/// <summary>
+/// An account. Identity owns the credentials (UserName, PasswordHash, SecurityStamp,
+/// lockout counters); this class adds what the app itself needs.
+/// </summary>
+public class User : IdentityUser<Guid>
 {
-    public Guid Id { get; set; }
-
-    public required string Username { get; set; }
-    public required string PasswordHash { get; set; }
-
     public bool IsAdmin { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

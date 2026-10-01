@@ -1,21 +1,33 @@
 using AudiobookServer.Core.Entities;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace AudiobookServer.Core.Data;
 
+/// <summary>
+/// IdentityUserContext rather than IdentityDbContext: users, claims, logins and tokens,
+/// but no role tables. A single-user server has nothing to put in them.
+/// </summary>
 public class AudiobookDbContext(DbContextOptions<AudiobookDbContext> options)
-    : DbContext(options)
+    : IdentityUserContext<User, Guid>(options)
 {
     public DbSet<Library> Libraries => Set<Library>();
     public DbSet<Book> Books => Set<Book>();
     public DbSet<AudioFile> AudioFiles => Set<AudioFile>();
     public DbSet<Chapter> Chapters => Set<Chapter>();
-    public DbSet<User> Users => Set<User>();
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<PlaybackPosition> PlaybackPositions => Set<PlaybackPosition>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        // Identity's own mapping first (keys, the normalized-name index, lengths), then
+        // table names that match the rest of the schema instead of AspNetUsers etc.
+        base.OnModelCreating(b);
+        b.Entity<IdentityUserClaim<Guid>>().ToTable("UserClaims");
+        b.Entity<IdentityUserLogin<Guid>>().ToTable("UserLogins");
+        b.Entity<IdentityUserToken<Guid>>().ToTable("UserTokens");
+
         b.Entity<Library>(e =>
         {
             e.HasIndex(x => x.RootPath).IsUnique();
@@ -74,12 +86,7 @@ public class AudiobookDbContext(DbContextOptions<AudiobookDbContext> options)
             e.Ignore(x => x.DurationSeconds);
         });
 
-        b.Entity<User>(e =>
-        {
-            e.HasIndex(x => x.Username).IsUnique();
-            e.Property(x => x.Username).HasMaxLength(100);
-            e.Property(x => x.PasswordHash).HasMaxLength(500);
-        });
+        b.Entity<User>(e => e.ToTable("Users"));
 
         b.Entity<Device>(e =>
         {
