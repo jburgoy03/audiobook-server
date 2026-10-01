@@ -26,12 +26,42 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
+// No UseHttpsRedirection: TLS terminates at Cloudflare in production, and in
+// development the web client reaches the API over plain HTTP through Vite's proxy.
 
-var summaries = new[]
+app.MapGet("/api/libraries", async (AudiobookDbContext db, CancellationToken ct) =>
+    await db.Libraries
+        .AsNoTracking()
+        .OrderBy(l => l.Name)
+        .Select(l => new
+        {
+            l.Id,
+            l.Name,
+            l.RootPath,
+            l.LastScanStartedAt,
+            l.LastScanCompletedAt,
+            Books = l.Books.Count
+        })
+        .ToListAsync(ct));
+
+app.MapGet("/api/libraries/{id:guid}", async (Guid id, AudiobookDbContext db, CancellationToken ct) =>
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    var library = await db.Libraries
+        .AsNoTracking()
+        .Where(l => l.Id == id)
+        .Select(l => new
+        {
+            l.Id,
+            l.Name,
+            l.RootPath,
+            l.LastScanStartedAt,
+            l.LastScanCompletedAt,
+            Books = l.Books.Count
+        })
+        .FirstOrDefaultAsync(ct);
+
+    return library is null ? Results.NotFound() : Results.Ok(library);
+});
 
 app.MapPost("/api/libraries", async (CreateLibraryRequest req, AudiobookDbContext db) =>
 {
@@ -178,8 +208,3 @@ app.MapMethods("/api/books/{bookId:guid}/files/{sequence:int}/stream", ["GET", "
 app.Run();
 
 record CreateLibraryRequest(string Name, string RootPath);
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

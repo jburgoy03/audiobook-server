@@ -1,6 +1,11 @@
-@AudiobookServer.Api_HostAddress = http://localhost:5043
+@host = http://localhost:5043
 
-GET {{AudiobookServer.Api_HostAddress}}/weatherforecast/
+GET {{host}}/api/libraries
+Accept: application/json
+
+###
+
+GET {{host}}/api/books
 Accept: application/json
 
 ###
