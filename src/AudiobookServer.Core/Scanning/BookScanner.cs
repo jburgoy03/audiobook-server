@@ -13,7 +13,8 @@ public record ScannedBook(
     string? Narrator,
     double DurationSeconds,
     IReadOnlyList<AudioFile> Files,
-    IReadOnlyList<Chapter> Chapters);
+    IReadOnlyList<Chapter> Chapters,
+    CoverSource? Cover = null);
 
 public interface IBookScanner
 {
@@ -143,6 +144,11 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         var first = ordered[0];
         var album = group.Album ?? first.Tag("album");
 
+        // Usually every file carries the same picture. The first file in playback
+        // order that has one is the cover.
+        var coverFile = ordered.FirstOrDefault(p => p.Cover is not null);
+        var cover = coverFile is null ? null : new CoverSource(coverFile.Path, coverFile.Cover!);
+
         return new ScannedBook(
             // Split books need distinct keys, since they share a directory.
             Key: group.Album is null ? directoryKey : $"{directoryKey}#{group.Album}",
@@ -151,7 +157,8 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
             Narrator: first.Tag("composer") ?? first.Tag("narrator"),
             DurationSeconds: offset,
             Files: files,
-            Chapters: chapters);
+            Chapters: chapters,
+            Cover: cover);
     }
 
     /// <summary>

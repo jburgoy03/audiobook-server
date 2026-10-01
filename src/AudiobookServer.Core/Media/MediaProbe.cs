@@ -28,10 +28,17 @@ public record ProbedFile(
     IReadOnlyList<ProbedChapter> Chapters,
     string? Codec = null,
     double? HeaderDurationSeconds = null,
-    DurationSource DurationSource = DurationSource.Header)
+    DurationSource DurationSource = DurationSource.Header,
+    ProbedCover? Cover = null)
 {
     public string? Tag(string name) =>
         Tags.TryGetValue(name, out var v) && !string.IsNullOrWhiteSpace(v) ? v.Trim() : null;
+}
+
+/// <summary>An embedded cover image: which stream holds it, and how big it is.</summary>
+public record ProbedCover(int StreamIndex, string Codec, int Width, int Height)
+{
+    public long Pixels => (long)Width * Height;
 }
 
 /// <summary>A chapter as it exists inside one file, with offsets relative to that file's start.</summary>
@@ -54,17 +61,22 @@ public class FfprobeMediaProbe(string executable = "ffprobe") : IMediaProbe
 
     public async Task<ProbedFile> ProbeAsync(string path, CancellationToken ct = default)
     {
-        // -select_streams a:0 keeps cover art out of the streams array. It does not
-        // affect -show_format or -show_chapters.
         var parsed = await RunAsync(path, ct,
             "-print_format", "json",
-            "-show_format", "-show_chapters",
-            "-show_streams", "-select_streams", "a:0");
+            "-show_format", "-show_chapters", "-show_streams");
 
         if (parsed.Format is null)
             throw new MediaProbeException($"ffprobe returned no format block for '{path}'.");
 
-        var codec = parsed.Streams.FirstOrDefault()?.CodecName;
+        var codec = parsed.Streams.FirstOrDefault(s => s.CodecType == "audio")?.CodecName;
+
+        // Files can carry several pictures; the Locke Lamora m4bs hold the same cover at
+        // 323x500 and 646x1000. The largest is the one worth keeping.
+        var cover = parsed.Streams
+            .Where(s => s.CodecType == "video" && s.Disposition?.AttachedPic == 1 && s.CodecName is not null)
+            .Select(s => new ProbedCover(s.Index, s.CodecName!, s.Width ?? 0, s.Height ?? 0))
+            .OrderByDescending(c => c.Pixels)
+            .FirstOrDefault();
         var headerDuration = ParseSeconds(parsed.Format.Duration);
 
         var duration = headerDuration;
@@ -100,7 +112,8 @@ public class FfprobeMediaProbe(string executable = "ffprobe") : IMediaProbe
             Chapters: chapters,
             Codec: codec,
             HeaderDurationSeconds: headerDuration,
-            DurationSource: source);
+            DurationSource: source,
+            Cover: cover);
     }
 
     /// <summary>

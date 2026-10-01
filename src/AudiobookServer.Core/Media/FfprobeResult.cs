@@ -16,8 +16,9 @@ public class FfprobeOutput
     public List<FfprobeChapter> Chapters { get; set; } = [];
 
     /// <summary>
-    /// Only the first audio stream, because every call passes -select_streams a:0.
-    /// Without that, embedded cover art (an mjpeg "video" stream) would appear here too.
+    /// Every stream in the main probe: audio, embedded cover art (mjpeg/png "video"
+    /// streams marked attached_pic), and data tracks such as m4b chapter text. The
+    /// packet-count call selects only the first audio stream.
     /// </summary>
     [JsonPropertyName("streams")]
     public List<FfprobeStream> Streams { get; set; } = [];
@@ -54,11 +55,23 @@ public class FfprobeFormat
 
 public class FfprobeStream
 {
+    [JsonPropertyName("index")]
+    public int Index { get; set; }
+
     [JsonPropertyName("codec_name")]
     public string? CodecName { get; set; }
 
     [JsonPropertyName("codec_type")]
     public string? CodecType { get; set; }
+
+    [JsonPropertyName("width")]
+    public int? Width { get; set; }
+
+    [JsonPropertyName("height")]
+    public int? Height { get; set; }
+
+    [JsonPropertyName("disposition")]
+    public FfprobeDisposition? Disposition { get; set; }
 
     [JsonPropertyName("sample_rate")]
     public int? SampleRate { get; set; }
@@ -66,6 +79,13 @@ public class FfprobeStream
     /// <summary>Only present when ffprobe ran with -count_packets.</summary>
     [JsonPropertyName("nb_read_packets")]
     public long? NbReadPackets { get; set; }
+}
+
+public class FfprobeDisposition
+{
+    /// <summary>1 when the stream is an embedded picture (cover art) rather than video.</summary>
+    [JsonPropertyName("attached_pic")]
+    public int AttachedPic { get; set; }
 }
 
 public class FfprobeChapter

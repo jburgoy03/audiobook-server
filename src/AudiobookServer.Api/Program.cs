@@ -10,6 +10,12 @@ builder.Services.AddDbContext<AudiobookDbContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 builder.Services.AddSingleton<IMediaProbe>(_ => new FfprobeMediaProbe());
+
+// Extracted covers live outside the library, which is treated as read-only.
+// Override with Covers:Directory (e.g. a mounted volume in a container).
+var coverDirectory = builder.Configuration["Covers:Directory"]
+    ?? Path.Combine(builder.Environment.ContentRootPath, "data", "covers");
+builder.Services.AddSingleton<ICoverStore>(_ => new FfmpegCoverStore(coverDirectory));
 builder.Services.AddSingleton<ILibraryWalker, LibraryWalker>();
 builder.Services.AddScoped<IBookScanner, BookScanner>();
 builder.Services.AddScoped<ILibraryScanService, LibraryScanService>();
@@ -98,6 +104,7 @@ app.MapGet("/api/books", async (AudiobookDbContext db) =>
             b.Title,
             b.Author,
             b.DurationSeconds,
+            HasCover = b.CoverPath != null,
             Files = b.Files.Count,
             Chapters = b.Chapters.Count
         })
@@ -147,6 +154,31 @@ app.MapGet("/api/books/{id:guid}", async (Guid id, AudiobookDbContext db, Cancel
         .FirstOrDefaultAsync(ct);
 
     return book is null ? Results.NotFound() : Results.Ok(book);
+});
+
+app.MapGet("/api/books/{id:guid}/cover", async (
+    Guid id, AudiobookDbContext db, ICoverStore covers, HttpContext http, CancellationToken ct) =>
+{
+    var coverPath = await db.Books
+        .AsNoTracking()
+        .Where(b => b.Id == id)
+        .Select(b => b.CoverPath)
+        .FirstOrDefaultAsync(ct);
+
+    var fullPath = coverPath is null ? null : covers.Resolve(coverPath);
+    if (fullPath is null || !File.Exists(fullPath))
+        return Results.NotFound();
+
+    var info = new FileInfo(fullPath);
+    var etag = new Microsoft.Net.Http.Headers.EntityTagHeaderValue(
+        $"\"{info.LastWriteTimeUtc.Ticks:x}-{info.Length:x}\"");
+
+    // The URL never changes but a rescan can replace the image, so browsers keep it
+    // and revalidate each time: a 304 with no body when nothing changed.
+    http.Response.Headers.CacheControl = "no-cache";
+
+    var contentType = Path.GetExtension(fullPath).ToLowerInvariant() == ".png" ? "image/png" : "image/jpeg";
+    return Results.File(fullPath, contentType, lastModified: info.LastWriteTimeUtc, entityTag: etag);
 });
 
 app.MapMethods("/api/books/{bookId:guid}/files/{sequence:int}/stream", ["GET", "HEAD"], async (

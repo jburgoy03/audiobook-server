@@ -16,6 +16,7 @@ export interface BookSummary {
   title: string
   author: string | null
   durationSeconds: number
+  hasCover: boolean
   files: number
   chapters: number
 }

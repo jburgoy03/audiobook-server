@@ -26,6 +26,7 @@ public class LibraryScanService(
     AudiobookDbContext db,
     ILibraryWalker walker,
     IBookScanner scanner,
+    ICoverStore covers,
     ILogger<LibraryScanService> logger) : ILibraryScanService
 {
     // A file counts as corrected when its header duration missed by more than a few
@@ -87,16 +88,21 @@ public class LibraryScanService(
 
                     var match = existing.FirstOrDefault(b => b.RelativePath == book.Key);
 
+                    // The book ID is settled before anything is written, because the
+                    // cover file is named after it.
+                    var bookId = match?.Id ?? Guid.NewGuid();
+                    var coverPath = await SaveCoverAsync(bookId, book, ct);
+
                     if (match is null)
                     {
-                        db.Books.Add(BuildBook(book, libraryId));
+                        db.Books.Add(BuildBook(book, libraryId, bookId, coverPath));
                         await db.SaveChangesAsync(ct);
                         db.ChangeTracker.Clear();
                         added++;
                     }
                     else
                     {
-                        await ReplaceContentsAsync(match.Id, book, ct);
+                        await ReplaceContentsAsync(match.Id, book, coverPath, ct);
                         updated++;
                     }
                 }
@@ -216,11 +222,26 @@ public class LibraryScanService(
         return false;
     }
 
-    private static Book BuildBook(ScannedBook scanned, Guid libraryId)
+    /// <summary>A failed cover is logged and skipped; it never fails the book.</summary>
+    private async Task<string?> SaveCoverAsync(Guid bookId, ScannedBook book, CancellationToken ct)
+    {
+        try
+        {
+            return await covers.SaveAsync(bookId, book.Cover, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Could not extract a cover for {Title}", book.Title);
+            return null;
+        }
+    }
+
+    private static Book BuildBook(ScannedBook scanned, Guid libraryId, Guid bookId, string? coverPath)
     {
         var book = new Book
         {
-            Id = Guid.NewGuid(),
+            Id = bookId,
+            CoverPath = coverPath,
             LibraryId = libraryId,
             Title = scanned.Title,
             Author = scanned.Author,
@@ -247,7 +268,7 @@ public class LibraryScanService(
     /// key sidesteps that, and keeping the book row preserves its ID so playback
     /// positions survive a rescan.
     /// </summary>
-    private async Task ReplaceContentsAsync(Guid bookId, ScannedBook scanned, CancellationToken ct)
+    private async Task ReplaceContentsAsync(Guid bookId, ScannedBook scanned, string? coverPath, CancellationToken ct)
     {
         await db.Books
             .Where(b => b.Id == bookId)
@@ -256,6 +277,7 @@ public class LibraryScanService(
                 .SetProperty(b => b.Author, scanned.Author)
                 .SetProperty(b => b.Narrator, scanned.Narrator)
                 .SetProperty(b => b.DurationSeconds, scanned.DurationSeconds)
+                .SetProperty(b => b.CoverPath, coverPath)
                 .SetProperty(b => b.LastScannedAt, DateTimeOffset.UtcNow), ct);
 
         await db.AudioFiles.Where(f => f.BookId == bookId).ExecuteDeleteAsync(ct);

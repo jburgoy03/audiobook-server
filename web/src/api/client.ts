@@ -13,6 +13,9 @@ export const api = {
   books: (signal?: AbortSignal) => getJson<BookSummary[]>('/api/books', signal),
   book: (id: string, signal?: AbortSignal) => getJson<BookDetail>(`/api/books/${id}`, signal),
 
+  /** Only meaningful when the book's hasCover is true. */
+  coverUrl: (bookId: string) => `/api/books/${bookId}/cover`,
+
   /** A URL, not a fetch: the <audio> element requests it, with its own Range headers. */
   streamUrl: (bookId: string, sequence: number) => `/api/books/${bookId}/files/${sequence}/stream`,
 }
