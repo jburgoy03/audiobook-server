@@ -216,4 +216,26 @@ public class BookScannerTests
         Assert.All(books, b => Assert.Equal(0, b.Files[0].StartOffsetSeconds));
         Assert.All(books, b => Assert.Equal(0, b.Chapters[0].StartOffsetSeconds));
     }
+
+    [Fact]
+    public async Task A_folder_cover_larger_than_the_embedded_one_becomes_the_cover()
+    {
+        var a = File("/library/book/01.mp3", 100) with { Cover = new ProbedCover(1, "mjpeg", 500, 500) };
+        var folderCover = new FolderImage("/library/book/cover.jpg", "jpeg", 1400, 1400);
+
+        var books = await ScannerFor(a).ScanAsync(new BookCandidate("/library/book", [a.Path], [folderCover]), Root);
+
+        Assert.Same(folderCover, Assert.Single(books).Cover);
+    }
+
+    [Fact]
+    public async Task Without_folder_images_the_embedded_picture_is_the_cover()
+    {
+        var a = File("/library/book/01.mp3", 100) with { Cover = new ProbedCover(1, "mjpeg", 500, 500) };
+
+        var book = await ScanOneAsync(ScannerFor(a), "/library/book", a.Path);
+
+        var embedded = Assert.IsType<EmbeddedCover>(book.Cover);
+        Assert.Equal(a.Path, embedded.AudioPath);
+    }
 }

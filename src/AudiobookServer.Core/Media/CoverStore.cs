@@ -2,14 +2,12 @@ using System.Diagnostics;
 
 namespace AudiobookServer.Core.Media;
 
-/// <summary>Where a book's cover comes from: one picture stream in one audio file.</summary>
-public record CoverSource(string AudioPath, ProbedCover Cover);
-
 public interface ICoverStore
 {
     /// <summary>
-    /// Extracts the cover for a book and returns the stored file name (relative to
-    /// the cover directory), or null if there was nothing to extract or it failed.
+    /// Stores the cover for a book (extracted from audio, or copied from a folder image)
+    /// and returns the stored file name, relative to the cover directory. Null source:
+    /// the book has no cover, and any stored one is removed.
     /// </summary>
     Task<string?> SaveAsync(Guid bookId, CoverSource? source, CancellationToken ct = default);
 
@@ -36,50 +34,32 @@ public class FfmpegCoverStore(string directory, string executable = "ffmpeg") : 
             return null;
         }
 
-        // jpeg and png are kept byte for byte. Anything else is rare enough that
-        // re-encoding it to jpeg beats teaching every client another format.
-        var codec = source.Cover.Codec.ToLowerInvariant();
-        var (extension, codecArgs) = codec switch
+        var extension = source switch
         {
-            "mjpeg" => ("jpg", new[] { "-c:v", "copy" }),
-            "png" => ("png", new[] { "-c:v", "copy" }),
-            _ => ("jpg", new[] { "-c:v", "mjpeg", "-q:v", "2" })
+            FolderImage { Format: "png" } => "png",
+            FolderImage => "jpg",
+            EmbeddedCover { Picture.Codec: var c } when c.Equals("png", StringComparison.OrdinalIgnoreCase) => "png",
+            _ => "jpg",
         };
 
         var fileName = $"{bookId}.{extension}";
         var finalPath = Path.Combine(_directory, fileName);
         var tempPath = finalPath + ".tmp";
 
-        var psi = new ProcessStartInfo(executable)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        foreach (var arg in new[] { "-v", "error", "-y", "-i", source.AudioPath, "-map", $"0:{source.Cover.StreamIndex}" })
-            psi.ArgumentList.Add(arg);
-        foreach (var arg in codecArgs)
-            psi.ArgumentList.Add(arg);
-        // image2 with -update 1 writes a single image to a plain file name. The format
-        // is explicit because the .tmp extension tells ffmpeg nothing.
-        foreach (var arg in new[] { "-frames:v", "1", "-update", "1", "-f", "image2", tempPath })
-            psi.ArgumentList.Add(arg);
-
         try
         {
-            using var process = Process.Start(psi)
-                ?? throw new InvalidOperationException($"Could not start {executable}.");
-
-            var stderrTask = process.StandardError.ReadToEndAsync(ct);
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
-            await process.WaitForExitAsync(ct);
-            var stderr = await stderrTask;
-            await stdoutTask;
-
-            if (process.ExitCode != 0 || !File.Exists(tempPath) || new FileInfo(tempPath).Length == 0)
-                throw new MediaProbeException($"ffmpeg exited {process.ExitCode} extracting cover from '{source.AudioPath}': {stderr.Trim()}");
+            switch (source)
+            {
+                case FolderImage image:
+                    // Already a jpeg or png (ImageHeader checked): copied byte for byte.
+                    File.Copy(image.Path, tempPath, overwrite: true);
+                    break;
+                case EmbeddedCover embedded:
+                    await ExtractAsync(embedded, tempPath, ct);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(source), source, "Unknown cover source.");
+            }
 
             // Write-then-move, so a request never sees a half-written image.
             File.Move(tempPath, finalPath, overwrite: true);
@@ -90,6 +70,46 @@ public class FfmpegCoverStore(string directory, string executable = "ffmpeg") : 
         {
             TryDelete(tempPath);
         }
+    }
+
+    private async Task ExtractAsync(EmbeddedCover source, string tempPath, CancellationToken ct)
+    {
+        // jpeg and png are kept byte for byte. Anything else is rare enough that
+        // re-encoding it to jpeg beats teaching every client another format.
+        var codecArgs = source.Picture.Codec.ToLowerInvariant() switch
+        {
+            "mjpeg" or "png" => new[] { "-c:v", "copy" },
+            _ => new[] { "-c:v", "mjpeg", "-q:v", "2" }
+        };
+
+        var psi = new ProcessStartInfo(executable)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        foreach (var arg in new[] { "-v", "error", "-y", "-i", source.AudioPath, "-map", $"0:{source.Picture.StreamIndex}" })
+            psi.ArgumentList.Add(arg);
+        foreach (var arg in codecArgs)
+            psi.ArgumentList.Add(arg);
+        // image2 with -update 1 writes a single image to a plain file name. The format
+        // is explicit because the .tmp extension tells ffmpeg nothing.
+        foreach (var arg in new[] { "-frames:v", "1", "-update", "1", "-f", "image2", tempPath })
+            psi.ArgumentList.Add(arg);
+
+        using var process = Process.Start(psi)
+            ?? throw new InvalidOperationException($"Could not start {executable}.");
+
+        var stderrTask = process.StandardError.ReadToEndAsync(ct);
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+        await process.WaitForExitAsync(ct);
+        var stderr = await stderrTask;
+        await stdoutTask;
+
+        if (process.ExitCode != 0 || !File.Exists(tempPath) || new FileInfo(tempPath).Length == 0)
+            throw new MediaProbeException($"ffmpeg exited {process.ExitCode} extracting cover from '{source.AudioPath}': {stderr.Trim()}");
     }
 
     public string? Resolve(string fileName)

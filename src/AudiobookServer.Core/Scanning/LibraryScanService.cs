@@ -194,9 +194,28 @@ public class LibraryScanService(
     /// <summary>
     /// Cheap check that avoids re-probing an unchanged directory. Compares the whole
     /// file set across every book the directory produced, against what is on disk now.
+    ///
+    /// Images aren't stored, so they're judged by time: an image modified after the
+    /// book was last scanned (a cover.jpg just added) triggers a rescan. A copy that
+    /// keeps the original timestamp (unzip, cp -p) or a deleted image goes unnoticed;
+    /// those need a forced rescan.
     /// </summary>
     private static bool NeedsRescan(List<Book> existing, BookCandidate candidate)
     {
+        var lastScanned = existing.Min(b => b.LastScannedAt);
+        if (lastScanned is null)
+            return true;
+
+        foreach (var image in candidate.FolderImages)
+        {
+            try
+            {
+                if (File.GetLastWriteTimeUtc(image.Path) > lastScanned.Value)
+                    return true;
+            }
+            catch { return true; }
+        }
+
         var stored = existing.SelectMany(b => b.Files).ToList();
 
         if (stored.Count != candidate.FilePaths.Count)

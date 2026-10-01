@@ -53,7 +53,7 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         var directoryKey = LibraryPaths.Relative(libraryRoot, candidate.DirectoryPath);
 
         return GroupIntoBooks(probed)
-            .Select(group => BuildBook(group, directoryName, directoryKey, libraryRoot))
+            .Select(group => BuildBook(group, directoryName, directoryKey, libraryRoot, candidate.FolderImages))
             .ToList();
     }
 
@@ -84,7 +84,8 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
     }
 
     private static ScannedBook BuildBook(
-        BookGroup group, string directoryName, string directoryKey, string libraryRoot)
+        BookGroup group, string directoryName, string directoryKey, string libraryRoot,
+        IReadOnlyList<FolderImage> folderImages)
     {
         var ordered = OrderFiles(group.Files);
 
@@ -144,10 +145,12 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         var first = ordered[0];
         var album = group.Album ?? first.Tag("album");
 
-        // Usually every file carries the same picture. The first file in playback
-        // order that has one is the cover.
+        // Usually every file carries the same picture, so the first file in playback
+        // order that has one speaks for the book. It then competes with the folder's
+        // images; see CoverSelector for the rule.
         var coverFile = ordered.FirstOrDefault(p => p.Cover is not null);
-        var cover = coverFile is null ? null : new CoverSource(coverFile.Path, coverFile.Cover!);
+        var embedded = coverFile is null ? null : new EmbeddedCover(coverFile.Path, coverFile.Cover!);
+        var cover = CoverSelector.Choose(folderImages, embedded, folderIsCollection: group.Album is not null);
 
         return new ScannedBook(
             // Split books need distinct keys, since they share a directory.
