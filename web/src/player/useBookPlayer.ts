@@ -10,6 +10,13 @@ const SAVE_INTERVAL_MS = 30_000
 // the book reopens at the start rather than on the last few seconds.
 const FINISHED_MARGIN_SECONDS = 5
 
+/** Where this browser left off, or the start if the book was finished. */
+export function resumePosition(book: BookDetail) {
+  const start = loadPosition(book.id) ?? 0
+  if (start >= totalDuration(book.files) - FINISHED_MARGIN_SECONDS) return 0
+  return clampPosition(book.files, start)
+}
+
 /**
  * Plays a multi-file book as one timeline through a single <audio> element.
  *
@@ -17,15 +24,28 @@ const FINISHED_MARGIN_SECONDS = 5
  * seconds: position = current file's start offset + audio.currentTime. Seeks are
  * translated back into (file, offset); a seek into another file swaps the src,
  * and the offset is applied once the new file's metadata has loaded.
+ *
+ * One hook instance serves one book, for its whole life: PlayerProvider keys it
+ * by activation, so the starting point and autoplay are read once, as initial
+ * state, and later changes to the options are ignored.
  */
-export function useBookPlayer(book: BookDetail) {
+export function useBookPlayer(
+  book: BookDetail,
+  { autoplay = false, startAt }: { autoplay?: boolean; startAt?: number } = {},
+) {
+  // Whether to start playing as soon as the starting point has loaded.
+  const [autoplayOnLoad] = useState(autoplay)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const fileIndexRef = useRef(0)
   const pendingSeekRef = useRef<number | null>(null)
   const pendingPlayRef = useRef(false)
-  const positionRef = useRef(0)
+  // Where to start: an explicit point (a chapter picked on an idle book), or
+  // where this browser left off.
+  const [position, setPosition] = useState(() =>
+    startAt !== undefined ? clampPosition(book.files, startAt) : resumePosition(book),
+  )
+  const positionRef = useRef(position)
 
-  const [position, setPosition] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [loading, setLoading] = useState(true)
   const [rate, setRateState] = useState(loadRate)
@@ -119,13 +139,9 @@ export function useBookPlayer(book: BookDetail) {
     audio.addEventListener('playing', onPlaying)
     audio.addEventListener('error', onError)
 
-    // Resume where this browser left off.
-    let start = loadPosition(book.id) ?? 0
-    if (start >= totalDuration(book.files) - FINISHED_MARGIN_SECONDS) start = 0
-    start = clampPosition(book.files, start)
-    const { index, offset } = locate(book.files, start)
-    updatePosition(start)
-    loadFile(index, offset, false)
+    // Start at the initial position (from storage, or startAt).
+    const { index, offset } = locate(book.files, positionRef.current)
+    loadFile(index, offset, autoplayOnLoad)
 
     // Leaving the page or switching tabs is the last reliable moment to save.
     const onHide = () => save()
@@ -149,7 +165,7 @@ export function useBookPlayer(book: BookDetail) {
       audio.load()
       audioRef.current = null
     }
-  }, [book.id, book.files, loadFile, save, updatePosition])
+  }, [book.id, book.files, loadFile, save, updatePosition, autoplayOnLoad])
 
   // Periodic save while playing, so a crash or killed tab loses at most 30s.
   useEffect(() => {
@@ -304,3 +320,6 @@ export function useBookPlayer(book: BookDetail) {
     nextChapter,
   }
 }
+
+/** Everything the UI can read from, and do to, a book's playback. */
+export type BookPlayer = ReturnType<typeof useBookPlayer>

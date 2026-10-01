@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { api } from '../api/client'
-import type { BookSummary } from '../api/types'
+import type { BookDetail, BookSummary } from '../api/types'
 import { Cover } from '../components/Cover'
+import { PlayPauseIcon } from '../components/Icons'
+import { ChapterTimeline } from '../player/ChapterTimeline'
+import { useActivate, useLivePlayer } from '../player/nowPlaying'
 import { loadSavedPosition } from '../player/storage'
+import { chapterIndexAt } from '../player/timeline'
 
 /** "4h 12m", "38m". Rounded, because this is a glance, not a clock. */
 function formatLength(seconds: number) {
@@ -24,6 +28,10 @@ interface Progress {
 const STARTED_AFTER_SECONDS = 60
 const FINISHED_MARGIN_SECONDS = 5
 
+// The most recent book is featured; up to three more follow it, which fills one
+// row of the six-column grid (each takes two columns).
+const MAX_IN_PROGRESS = 4
+
 function progressFor(book: BookSummary): Progress | null {
   const saved = loadSavedPosition(book.id)
   if (!saved || book.durationSeconds <= 0) return null
@@ -34,6 +42,109 @@ function progressFor(book: BookSummary): Progress | null {
     fraction: saved.position / book.durationSeconds,
     savedAt: saved.savedAt,
   }
+}
+
+/**
+ * The book you were last listening to, given the width of the page: the cover,
+ * where you are (chapter and a chapter-segmented progress bar, the same picture
+ * as the player's timeline), and a Resume button that plays it right here. Once
+ * it's the active book, everything on it is live and the button pauses.
+ *
+ * The summary list has no chapters, so this fetches the one book's detail. Until
+ * it arrives, the bar is drawn as a single segment and the chapter line is blank.
+ */
+function FeaturedBook({ book, progress }: { book: BookSummary; progress: Progress }) {
+  const activate = useActivate()
+  const live = useLivePlayer(book.id)
+  const [detail, setDetail] = useState<BookDetail | null>(null)
+  const [starting, setStarting] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    api
+      .book(book.id, controller.signal)
+      .then(setDetail)
+      .catch(() => {
+        // The feature still works without chapters.
+      })
+    return () => controller.abort()
+  }, [book.id])
+
+  const position = live ? live.position : progress.position
+  const fraction = book.durationSeconds > 0 ? position / book.durationSeconds : 0
+  const chapters = detail?.chapters ?? []
+  const chapterIndex = chapterIndexAt(chapters, position)
+  const chapter = chapterIndex >= 0 ? chapters[chapterIndex] : undefined
+  const href = `/books/${book.id}`
+  const playing = live?.playing ?? false
+
+  const onButton = async () => {
+    if (live) {
+      live.toggle()
+      return
+    }
+    // Starting needs the file list. It's usually here already; if the click beat
+    // the fetch, get it now. The click still counts as permission to play.
+    setStarting(true)
+    try {
+      activate(detail ?? (await api.book(book.id)), { autoplay: true })
+    } catch {
+      // Leave the button as it was; the book page will show the real error.
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  return (
+    <article className="feature grid" aria-labelledby={`feature-${book.id}`}>
+      {/* The title link is the accessible one; the cover is a larger mouse target. */}
+      <Link to={href} className="feature-cover" tabIndex={-1} aria-hidden="true">
+        <Cover
+          bookId={book.id}
+          title={book.title}
+          hasCover={book.hasCover}
+          progress={fraction}
+          className="cover-capped"
+        />
+      </Link>
+
+      <div className="feature-head">
+        <h3 className="feature-title" id={`feature-${book.id}`}>
+          <Link to={href}>{book.title}</Link>
+        </h3>
+        <p className="muted">{book.author ?? 'Unknown author'}</p>
+      </div>
+
+      <div className="feature-progress">
+        <p className="feature-chapter">
+          {chapter ? (
+            <>
+              <span>{chapter.title}</span>
+              <span className="muted">
+                Chapter {chapterIndex + 1} of {chapters.length}
+              </span>
+            </>
+          ) : (
+            ' '
+          )}
+        </p>
+        <ChapterTimeline chapters={chapters} total={book.durationSeconds} value={position} />
+        <p className="times">
+          <span>{Math.floor(fraction * 100)}% listened</span>
+          <span>{formatLength(book.durationSeconds - position)} left</span>
+        </p>
+        <button
+          type="button"
+          className="resume"
+          onClick={onButton}
+          aria-busy={starting || (live?.loading && !playing) ? true : undefined}
+        >
+          <PlayPauseIcon playing={playing} size={20} />
+          {playing ? 'Pause' : 'Resume'}
+        </button>
+      </div>
+    </article>
+  )
 }
 
 export function LibraryPage() {
@@ -65,7 +176,7 @@ export function LibraryPage() {
       (books ?? [])
         .filter((b) => progress.has(b.id))
         .sort((a, b) => progress.get(b.id)!.savedAt.localeCompare(progress.get(a.id)!.savedAt))
-        .slice(0, 3),
+        .slice(0, MAX_IN_PROGRESS),
     [books, progress],
   )
 
@@ -88,36 +199,50 @@ export function LibraryPage() {
     )
   }
 
+  const [featured, ...others] = inProgress
+  const totalSeconds = books.reduce((sum, b) => sum + b.durationSeconds, 0)
+
   return (
     <>
-      {inProgress.length > 0 && (
+      {featured && (
         <section className="shelf" aria-labelledby="continue-heading">
-          <h2 id="continue-heading">Continue listening</h2>
-          <ul className="continue-list">
-            {inProgress.map((b) => {
-              const p = progress.get(b.id)!
-              return (
-                <li key={b.id}>
-                  <Link to={`/books/${b.id}`} className="continue-item">
-                    <Cover bookId={b.id} title={b.title} hasCover={b.hasCover} progress={p.fraction} />
-                    <span className="continue-text">
-                      <span className="book-title">{b.title}</span>
-                      <span className="muted">{b.author ?? 'Unknown author'}</span>
-                      <span className="continue-left">
-                        {formatLength(b.durationSeconds - p.position)} left
+          <div className="section-head">
+            <h2 id="continue-heading">Continue listening</h2>
+          </div>
+          <FeaturedBook book={featured} progress={progress.get(featured.id)!} />
+
+          {others.length > 0 && (
+            <ul className="shelf-list continue-list continue-more grid">
+              {others.map((b) => {
+                const p = progress.get(b.id)!
+                return (
+                  <li key={b.id}>
+                    <Link to={`/books/${b.id}`} className="continue-item">
+                      <Cover bookId={b.id} title={b.title} hasCover={b.hasCover} progress={p.fraction} />
+                      <span className="continue-text">
+                        <span className="book-title">{b.title}</span>
+                        <span className="muted">{b.author ?? 'Unknown author'}</span>
+                        <span className="continue-left">
+                          {formatLength(b.durationSeconds - p.position)} left
+                        </span>
                       </span>
-                    </span>
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </section>
       )}
 
       <section className="shelf" aria-labelledby="all-heading">
-        <h2 id="all-heading">All books</h2>
-        <ul className="book-grid">
+        <div className="section-head">
+          <h2 id="all-heading">All books</h2>
+          <span className="section-count">
+            {books.length} {books.length === 1 ? 'book' : 'books'}, {formatLength(totalSeconds)}
+          </span>
+        </div>
+        <ul className="shelf-list grid">
           {books.map((b) => (
             <li key={b.id}>
               <Link to={`/books/${b.id}`} className="book-tile">

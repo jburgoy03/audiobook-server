@@ -8,14 +8,17 @@ import { Player } from '../player/Player'
 
 export function BookPage() {
   const { id } = useParams()
+  // Keyed by id: moving to another book remounts BookView, which resets its
+  // state, so the fetch effect never has to clear the previous book by hand.
+  return id ? <BookView key={id} id={id} /> : null
+}
+
+function BookView({ id }: { id: string }) {
   const [book, setBook] = useState<BookDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!id) return
     const controller = new AbortController()
-    setBook(null)
-    setError(null)
     api
       .book(id, controller.signal)
       .then(setBook)
@@ -42,9 +45,9 @@ export function BookPage() {
       {!error && !book && <p className="notice muted">Loading…</p>}
 
       {book && (
-        <article className="book">
-          <header className="book-header">
-            <Cover bookId={book.id} title={book.title} hasCover={book.hasCover} className="book-cover" />
+        <article className="book grid">
+          <header className="book-aside">
+            <Cover bookId={book.id} title={book.title} hasCover={book.hasCover} className="book-cover cover-capped" />
             <div className="book-heading">
               <h1>{book.title}</h1>
               {book.subtitle && <p className="book-subtitle">{book.subtitle}</p>}
@@ -52,8 +55,11 @@ export function BookPage() {
               {book.narrator && <p className="muted">Read by {book.narrator}</p>}
             </div>
           </header>
-          {/* key: a different book gets a fresh player and audio element */}
-          <Player key={book.id} book={book} />
+          <div className="book-main">
+            {/* The audio belongs to PlayerProvider; this is the book's controls,
+                live if it's the active book and idle otherwise. */}
+            <Player key={book.id} book={book} />
+          </div>
         </article>
       )}
     </>

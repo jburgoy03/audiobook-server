@@ -5,8 +5,10 @@ interface ChapterTimelineProps {
   chapters: Chapter[]
   total: number
   value: number
-  onScrub: (value: number) => void
-  onCommit: () => void
+  /** Without these, the bar is a read-only picture of progress (no slider). */
+  onScrub?: (value: number) => void
+  onCommit?: () => void
+  className?: string
 }
 
 /**
@@ -17,9 +19,11 @@ interface ChapterTimelineProps {
  * Segments are positioned by percentage of the whole book rather than laid out
  * with gaps, so the playhead and the segments can't drift apart on long books.
  * A native range input sits on top, transparent, so keyboard and screen readers
- * get a real slider.
+ * get a real slider. Read-only bars (the library's progress) leave it out and are
+ * hidden from assistive technology, since the text beside them says the same.
  */
-export function ChapterTimeline({ chapters, total, value, onScrub, onCommit }: ChapterTimelineProps) {
+export function ChapterTimeline({ chapters, total, value, onScrub, onCommit, className }: ChapterTimelineProps) {
+  const interactive = onScrub !== undefined
   const segments =
     chapters.length > 0
       ? chapters
@@ -28,7 +32,10 @@ export function ChapterTimeline({ chapters, total, value, onScrub, onCommit }: C
   const pct = (seconds: number) => (total > 0 ? (seconds / total) * 100 : 0)
 
   return (
-    <div className="timeline">
+    <div
+      className={['timeline', !interactive && 'timeline-static', className].filter(Boolean).join(' ')}
+      aria-hidden={interactive ? undefined : true}
+    >
       <div className="timeline-track" aria-hidden="true">
         {segments.map((c) => {
           const length = c.endOffsetSeconds - c.startOffsetSeconds
@@ -51,20 +58,22 @@ export function ChapterTimeline({ chapters, total, value, onScrub, onCommit }: C
         })}
       </div>
       <span className="timeline-head" aria-hidden="true" style={{ left: `${pct(value)}%` }} />
-      <input
-        className="timeline-input"
-        type="range"
-        min={0}
-        max={total}
-        step={1}
-        value={value}
-        aria-label="Position in book"
-        aria-valuetext={`${formatTime(value)} of ${formatTime(total)}`}
-        onChange={(e) => onScrub(Number(e.target.value))}
-        onPointerUp={onCommit}
-        onKeyUp={onCommit}
-        onBlur={onCommit}
-      />
+      {interactive && (
+        <input
+          className="timeline-input"
+          type="range"
+          min={0}
+          max={total}
+          step={1}
+          value={value}
+          aria-label="Position in book"
+          aria-valuetext={`${formatTime(value)} of ${formatTime(total)}`}
+          onChange={(e) => onScrub(Number(e.target.value))}
+          onPointerUp={onCommit}
+          onKeyUp={onCommit}
+          onBlur={onCommit}
+        />
+      )}
     </div>
   )
 }

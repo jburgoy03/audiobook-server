@@ -29,6 +29,9 @@ Scope for a first pass:
 - Endpoints: login, refresh, logout, current user.
 - Protect every `/api` route, including stream and cover.
 - Web: login page, an auth context, and a redirect to login on 401.
+- Playback outlives pages now (`PlayerProvider` sits above the routes), so logout,
+  or a 401 on a stream request, must also stop the active book. Otherwise audio
+  keeps playing, and the now-playing bar keeps showing, for a signed-out user.
 
 Note: the project doc lists Testcontainers integration tests as a prerequisite for
 2e. The decision to skip tests for now was deliberate; revisit it here, since auth is
@@ -36,24 +39,55 @@ where regressions are least visible.
 
 ## B. Position sync (Phase 2f)
 
+### Server
+
 The schema is already in place: `PlaybackPosition` with a unique `(UserId, BookId)`,
 `PositionSeconds`, `ReportedAt` (client time) separate from `UpdatedAt` (server
 time), `DeviceId`, and `IsFinished`.
 
 - `POST /api/progress` with `{ bookId, positionSeconds, reportedAt, deviceId, isFinished }`.
-- `GET /api/progress` for all of the user's books (feeds "Continue listening"), and
-  `GET /api/books/{id}/progress`.
+- `GET /api/progress` for all of the user's books (feeds "Continue listening" and the
+  featured book), and `GET /api/books/{id}/progress`.
 - Conflict rule from the project doc: furthest position wins, unless the older report
   is well ahead, in which case flag it rather than silently overwrite. "Finished" is
   its own state, not just "position at the end". Client clock skew is a known gap.
 - Validate on the server: clamp positions to the book's duration. `BookTimeline`
   (Core/Playback) is still waiting for an endpoint and can back this.
-- Web client: replace `web/src/player/storage.ts` with API calls, keep browser
-  storage as an offline fallback, and on first login upload any positions already
-  saved locally. Keep the current save points (pause, file change, every 30s, page
-  hide); use `fetch(..., { keepalive: true })` or `sendBeacon` for the page-hide save.
-- The library page's "started" and "finished" thresholds (`LibraryPage.tsx`) should
-  move to the server's notion of finished.
+- Speed (`rate`) is one setting for all books today. It can stay per-browser, or
+  become a per-user preference; it doesn't need the conflict machinery.
+
+### Web client: where positions are read and written today
+
+As of the 2026-10-01 web polish, playback is app-level: `PlayerProvider` (above
+the routes) runs one active book at a time through `useBookPlayer`, and publishes
+it to a small store (`player/nowPlaying.ts`). The library's Resume button plays in
+place, and playback continues across pages; a now-playing bar shows it elsewhere.
+
+Every position read and write goes through `web/src/player/storage.ts`, which is
+the seam to replace. Callers:
+
+| Where | What it does | Sync concern |
+|---|---|---|
+| `useBookPlayer` `save()` | Writes on pause, at each file boundary, every 30s while playing, on `pagehide`/`visibilitychange`, and when the book stops being active (another book activated) | Becomes `POST /api/progress`. The page-hide save needs `fetch(..., { keepalive: true })` or `sendBeacon`. Navigating between pages no longer saves, because playback no longer stops. |
+| `resumePosition()` (`useBookPlayer.ts`) | Reads the start point when a book is activated, as **synchronous** initial state | Can't await the server. Read from a client-side progress cache filled from `GET /api/progress` (see below). |
+| `useIdlePlayer` (`Player.tsx`) | Shows the saved position for a book page whose book isn't active | Same cache. |
+| `progressFor()` (`LibraryPage.tsx`) | Picks "Continue listening" books and the featured one, ordered by `savedAt` | Order by server `ReportedAt`; use `IsFinished` instead of the local thresholds. |
+| `FINISHED_MARGIN_SECONDS` (twice) and `STARTED_AFTER_SECONDS` | Local notions of "finished" and "started" | Move "finished" to the server. "Started" can stay a client display rule. |
+
+Suggested shape:
+
+- A progress store next to `nowPlaying.ts` (same `useSyncExternalStore` pattern):
+  loaded from `GET /api/progress` at startup and when the tab becomes visible again,
+  and written through to the server. Browser storage stays as its offline cache, so
+  every read above stays synchronous.
+- **The active book on this device is authoritative while it's playing.** A refresh
+  from the server must not move the live player. Apply incoming positions only to
+  inactive books, and check the active book's server position only when it's
+  activated (e.g. "you're further ahead on your phone: jump to 14:32?" rather than
+  silently jumping).
+- A per-browser device ID (a UUID in browser storage) for `deviceId`; the `Device`
+  entity already exists.
+- On first login, upload any positions already saved locally (they predate sync).
 
 ## C. Deploy (Phase 4)
 

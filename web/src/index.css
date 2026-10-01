@@ -1,46 +1,80 @@
 /*
-  Bookcloth and ribbon.
-  The visual language comes from physical books: paper, ink, cloth covers, and a
-  red satin ribbon marking where you stopped. Red is reserved for that one idea:
-  the ribbon on started books, the current chapter, and the playhead.
+  Black, bone and blood.
+  A listening room with the lights off: a true black page, bone-white type in
+  EB Garamond, and the books' own cover art as the only colour. One accent,
+  blood red, keeps a single meaning, where you are in a book: the ribbon on
+  started books, the current chapter, and the playhead. Nothing else is red.
+
+  Dark only, by design: this is a player for evenings and headphones.
+
+  The icon set (components/Icons.tsx) carries the app's feel: one grid, one
+  stroke weight, rounded joins, and motion only in answer to the listener.
+
+  Layout is one system, used by every page:
+  - One frame: --frame wide at most, --gutter from the window edge. The masthead
+    and main share it, so every page has the same left and right edges.
+  - One column grid inside the frame: --cols equal tracks with --col-gap between.
+    Library tiles take one track, "Continue listening" items take two, and the
+    book page splits two tracks (cover) / four tracks (player) on desktop. Every
+    vertical edge on every page falls on one of these tracks.
+  - Inside a block, left content sits on the block's left edge and right content
+    on its right edge. Only the transport controls are centered, and they are
+    centered on the same width as the timeline above them.
 */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
 
-  --page: #f1f2ee;
-  --ink: #171b22;
-  --muted: #5e6672;
-  --rule: #d5d8d2;
-  --ribbon: #a3263a;
-  --cloth: #22324a;
-  --cloth-ink: #e9e6dc;
-  --played: #3a4250;
-  --unplayed: #d9dcd6;
+  --page: #000;
+  --ink: #ebe6dc;
+  --muted: #8f897e;
+  --faint: #5b5750;
+  --rule: rgb(235 230 220 / 0.12);
+  --raised: rgb(235 230 220 / 0.06);
+  --ribbon: #c8323e;
+  --played: rgb(235 230 220 / 0.82);
+  --unplayed: rgb(235 230 220 / 0.14);
 
-  --serif: 'Literata Variable', Georgia, 'Times New Roman', serif;
-  --sans: 'Figtree Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --text: 'EB Garamond Variable', Garamond, 'Iowan Old Style', Georgia, serif;
 
-  font-family: var(--sans);
-  font-size: 100%;
+  /* Layout tokens. --cols changes at two breakpoints (below); it is always even,
+     so two-track items like "Continue listening" always tile a row exactly. */
+  --frame: 72rem;
+  --gutter: clamp(1.25rem, 4vw, 2.5rem);
+  --cols: 2;
+  --col-gap: 1rem;
+  --row-gap: 2rem;
+  --section-gap: 4rem;
+
+  /* Motion: a press goes in fast and releases slower, so it reads as a
+     response rather than an animation. */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --release: 180ms;
+  --press: 60ms;
+  --hover-tint: rgb(235 230 220 / 0.07);
+  --press-tint: rgb(235 230 220 / 0.13);
+
+  font-family: var(--text);
+  /* Garamond runs small; a 17px base keeps it comfortable to read. */
+  font-size: 106.25%;
   line-height: 1.5;
+  font-variant-numeric: lining-nums proportional-nums;
   color: var(--ink);
   background: var(--page);
   -webkit-font-smoothing: antialiased;
+  /* Reserve the scrollbar's space on every page. Without this the book page
+     (which scrolls) and the library (which may not) center the frame
+     differently, and every edge jumps sideways when you navigate. */
+  scrollbar-gutter: stable;
+  scrollbar-color: var(--faint) transparent;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --page: #12161c;
-    --ink: #e8e6e0;
-    --muted: #9097a1;
-    --rule: #262d36;
-    --ribbon: #d8566a;
-    --cloth: #22324a;
-    --cloth-ink: #e9e6dc;
-    --played: #c9ccd1;
-    --unplayed: #2b333d;
-  }
+@media (min-width: 40rem) {
+  :root { --cols: 4; --col-gap: 1.5rem; --row-gap: 2.5rem; }
+}
+
+@media (min-width: 64rem) {
+  :root { --cols: 6; }
 }
 
 * { box-sizing: border-box; }
@@ -48,41 +82,80 @@ body { margin: 0; min-height: 100vh; background: var(--page); }
 img { display: block; max-width: 100%; }
 button, select { font: inherit; color: inherit; }
 a { color: inherit; }
+::selection { background: rgb(235 230 220 / 0.25); }
 
 :focus-visible {
-  outline: 2px solid var(--ribbon);
+  outline: 1.5px solid var(--ink);
   outline-offset: 3px;
   border-radius: 4px;
 }
 
 .muted { color: var(--muted); }
+.icon { display: block; flex: none; }
 
-/* ---------- Frame ---------- */
+/* ---------- Frame and grid ---------- */
+
+.frame {
+  width: min(var(--frame), 100% - 2 * var(--gutter));
+  margin-inline: auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  column-gap: var(--col-gap);
+}
 
 .masthead {
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 1.5rem 1.25rem 0;
+  position: relative;
+  padding: 1.5rem 0 1.1rem;
+  border-bottom: 1px solid var(--rule);
 }
 
 .wordmark {
-  font-family: var(--serif);
-  font-size: 1.125rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  display: inline-block;
+  padding-left: calc(var(--ribbon-width) + 0.7rem);
+  font-size: 1.375rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1;
   text-decoration: none;
+  --ribbon-width: 0.8rem;
 }
 
-.app {
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 1.5rem 1.25rem 5rem;
+/* The app's mark: a ribbon hanging from the top edge of the page on the frame's
+   left line, the way a bookmark hangs out of a book, ending just below the
+   wordmark's baseline. The same ribbon marks started books on their covers. */
+.ribbon-mark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--ribbon-width);
+  height: calc(1.5rem + 1.375rem * 0.95);
+  background: var(--ribbon);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 0.4rem), 0 100%);
 }
 
-.notice { max-width: 36rem; margin: 3rem 0; }
+.app { padding: 1.75rem 0 5rem; }
 
-h1, h2 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.015em; }
-h2 { font-size: 1.25rem; margin: 0 0 1.25rem; }
+.notice { max-width: 36rem; margin: 3rem 0; font-size: 1.125rem; }
+
+h1 { font-weight: 450; letter-spacing: -0.01em; }
+h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
+
+/* A section heading: title on the left edge, an optional count on the right
+   edge, and a rule that spans the full width, so a sparse section still shows
+   where the frame ends. */
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--rule);
+}
+.section-count { color: var(--muted); font-variant-numeric: lining-nums tabular-nums; }
 
 /* ---------- Covers ---------- */
 
@@ -90,10 +163,18 @@ h2 { font-size: 1.25rem; margin: 0 0 1.25rem; }
   position: relative;
   aspect-ratio: 1;
   overflow: hidden;
-  border-radius: 3px;
-  background: var(--cloth);
-  /* A cover is a physical object: a slight lift, not a floating card. */
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18), 0 6px 16px -10px rgb(0 0 0 / 0.45);
+  border-radius: 2px;
+  background: #121110;
+}
+/* On black, a cover needs an edge more than a shadow: a hairline keyline. */
+.cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.09);
 }
 
 .cover-backdrop {
@@ -102,7 +183,7 @@ h2 { font-size: 1.25rem; margin: 0 0 1.25rem; }
   width: 124%;
   height: 124%;
   object-fit: cover;
-  filter: blur(18px) saturate(1.1) brightness(0.8);
+  filter: blur(22px) saturate(1.05) brightness(0.55);
 }
 
 .cover-image {
@@ -112,44 +193,42 @@ h2 { font-size: 1.25rem; margin: 0 0 1.25rem; }
   object-fit: contain;
 }
 
+/* A book with no art: its title set plainly on a near-black board. */
 .cover-cloth {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
   padding: 14%;
-  color: var(--cloth-ink);
-  font-family: var(--serif);
-  font-size: 1rem;
-  line-height: 1.25;
+  color: var(--ink);
+  font-size: 1.125rem;
+  font-style: italic;
+  line-height: 1.2;
   text-align: center;
-  /* Bookcloth weave: two faint crossing hatch patterns. */
-  background:
-    repeating-linear-gradient(0deg, rgb(255 255 255 / 0.035) 0 1px, transparent 1px 3px),
-    repeating-linear-gradient(90deg, rgb(0 0 0 / 0.08) 0 1px, transparent 1px 3px),
-    var(--cloth);
+  background: #121110;
 }
 
 /* The ribbon hangs from the top edge, slightly in from the right, with a notched tail. */
 .cover-ribbon {
   position: absolute;
+  z-index: 2;
   top: 0;
   right: 12%;
-  width: 11%;
-  max-width: 18px;
-  height: 30%;
+  width: 10%;
+  max-width: 16px;
+  height: 28%;
   background: var(--ribbon);
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%);
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.1);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%);
 }
 
 .cover-progress {
   position: absolute;
+  z-index: 2;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 4px;
-  background: rgb(0 0 0 / 0.35);
+  height: 3px;
+  background: rgb(0 0 0 / 0.55);
 }
 .cover-progress > span {
   display: block;
@@ -157,123 +236,246 @@ h2 { font-size: 1.25rem; margin: 0 0 1.25rem; }
   background: var(--ribbon);
 }
 
+/* Large covers (book page, featured book). The frame is always the full width
+   of its tracks, so every book's cover is the same size. A small embedded image
+   (175px, say) is drawn no bigger than it stays sharp, centred on its own blurred
+   backdrop. Cover sets --cover-max once the image loads. */
+.cover-capped .cover-image {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  max-width: var(--cover-max, 100%);
+  max-height: var(--cover-max, 100%);
+}
+
 /* ---------- Library ---------- */
 
-.shelf + .shelf { margin-top: 3.5rem; }
+.shelf + .shelf { margin-top: var(--section-gap); }
 
-.continue-list,
-.book-grid {
+.shelf-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  row-gap: var(--row-gap);
 }
 
-.continue-list {
+/* A "Continue listening" item is two grid tracks: the cover fills the first,
+   exactly as wide as a cover in "All books" below it, and the text fills the
+   second. Subgrid makes those the page grid's own tracks, not a lookalike. */
+.continue-list > li {
+  grid-column: span 2;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
-  gap: 1.25rem 2rem;
+  grid-template-columns: subgrid;
 }
 
 .continue-item {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 112px 1fr;
-  gap: 1.1rem;
-  align-items: center;
+  grid-template-columns: subgrid;
+  align-items: start;
   text-decoration: none;
 }
 
-.continue-text { display: grid; gap: 0.15rem; }
-.continue-left { margin-top: 0.4rem; color: var(--ribbon); font-weight: 600; font-size: 0.9375rem; }
+.continue-text { display: grid; gap: 0.1rem; }
+.continue-more { margin-top: var(--row-gap); }
+.continue-left { margin-top: 0.35rem; color: var(--muted); font-variant-numeric: lining-nums tabular-nums; }
 
-.book-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 2.25rem 1.5rem;
+/* Featured book: the most recent book in progress, across the whole frame.
+   Phone: cover and title side by side, progress full width underneath.
+   Tablet: progress moves up beside the cover.
+   Desktop: the book page's split, cover on two tracks and the rest on four;
+   the title is level with the cover's top, the button with its bottom. */
+.feature {
+  grid-template-rows: auto 1fr;
+  row-gap: 1.25rem;
+  align-items: start;
+}
+.feature-cover { grid-column: 1; grid-row: 1; display: block; }
+.feature-head { grid-column: 2; grid-row: 1; min-width: 0; }
+.feature-progress { grid-column: 1 / -1; grid-row: 2; min-width: 0; }
+
+@media (min-width: 40rem) {
+  .feature-cover { grid-row: 1 / span 2; }
+  .feature-head { grid-column: 2 / -1; }
+  .feature-progress { grid-column: 2 / -1; align-self: end; }
+}
+@media (min-width: 64rem) {
+  .feature-cover { grid-column: 1 / span 2; }
+  .feature-head,
+  .feature-progress { grid-column: 3 / -1; }
+}
+
+.feature-title {
+  margin: 0 0 0.4rem;
+  font-size: clamp(1.875rem, 4vw, 3.25rem);
+  font-weight: 450;
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+}
+.feature-title a { text-decoration: none; }
+.feature-head p { margin: 0; font-size: 1.1875rem; font-style: italic; color: var(--muted); }
+
+/* Chapter on the left edge, its place in the book on the right edge. */
+.feature-chapter {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin: 0 0 0.35rem;
+  font-size: 1.1875rem;
+}
+.feature-chapter > :first-child { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.feature-chapter .muted { flex: none; font-size: 1rem; font-style: italic; }
+.feature-progress .times { margin: 0.35rem 0 0; }
+
+.resume {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 1.5rem;
+  padding: 0.6rem 1.35rem 0.6rem 1.05rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--page);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .book-tile {
   display: grid;
-  gap: 0.15rem;
+  gap: 0.1rem;
   text-decoration: none;
 }
-.book-tile .cover { margin-bottom: 0.65rem; }
+.book-tile .cover { margin-bottom: 0.75rem; }
 
 .book-title {
-  font-family: var(--serif);
-  font-weight: 600;
-  font-size: 1.0625rem;
-  line-height: 1.3;
+  font-size: 1.1875rem;
+  font-weight: 500;
+  line-height: 1.2;
 }
+.book-tile .muted,
+.continue-text .muted { font-style: italic; }
 
-.book-length { color: var(--muted); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
-
-.book-tile:hover .book-title,
-.continue-item:hover .book-title {
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
+.book-length { color: var(--faint); font-size: 0.9375rem; font-variant-numeric: lining-nums tabular-nums; }
 
 /* ---------- Book page ---------- */
 
 .back {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  margin-left: -0.3rem;
+  gap: 0.2rem;
+  /* The chevron's drawing starts ~5px inside its box; pull it back so the
+     visible stroke, not the box, sits on the frame's left edge. */
+  margin: 0 0 1.75rem -0.35rem;
   color: var(--muted);
+  font-style: italic;
   text-decoration: none;
 }
-.back:hover { color: var(--ink); }
 
-.book { max-width: 760px; }
+/* Mobile and tablet: one column. The header is a row of the page grid, so the
+   cover is exactly one library tile wide and the title starts on the next track. */
+.book { row-gap: 2.5rem; align-items: start; }
 
-.book-header {
+.book-aside {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: 2rem;
-  align-items: end;
-  margin: 1.5rem 0 2.5rem;
+  grid-template-columns: subgrid;
+  align-items: start;
 }
+.book-cover { grid-column: 1; }
+.book-heading { grid-column: 2 / -1; }
+.book-main { grid-column: 1 / -1; min-width: 0; }
 
 .book-heading h1 {
-  margin: 0 0 0.6rem;
-  font-size: clamp(1.75rem, 4vw, 2.625rem);
-  line-height: 1.1;
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.875rem, 3.6vw, 3rem);
+  line-height: 1.02;
+  letter-spacing: -0.015em;
 }
-.book-subtitle { margin: -0.3rem 0 0.6rem; font-family: var(--serif); font-size: 1.125rem; }
+.book-subtitle { margin: -0.2rem 0 0.5rem; font-size: 1.25rem; font-style: italic; }
 .book-heading p { margin: 0; }
-.book-credit { font-size: 1.0625rem; }
+.book-credit { font-size: 1.1875rem; font-style: italic; color: var(--muted); }
+
+/* Desktop: two columns on the same six tracks as the library. Cover and details
+   take two tracks and stay put; player and chapters take four. The right column
+   is one viewport tall, and the chapter list scrolls inside it, so the player
+   never scrolls away. */
+@media (min-width: 64rem) {
+  .book-aside {
+    grid-column: span 2;
+    grid-template-columns: 1fr;
+    row-gap: 1.5rem;
+    position: sticky;
+    top: 1.5rem;
+  }
+  .book-cover, .book-heading { grid-column: 1; }
+
+  .book-main {
+    grid-column: span 4;
+    position: sticky;
+    top: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    max-height: max(36rem, calc(100dvh - 3rem));
+  }
+  .book-main .chapters {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 14rem;
+  }
+  /* The list's scrollbar hangs outside the frame, in the page margin, the way
+     the page's own scrollbar sits outside the content: the rows then end on the
+     same right edge as the timeline. --scrollbar is measured by the player,
+     since scrollbar width varies by browser and OS. */
+  .book-main .chapters ol {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin-right: calc(-1 * var(--scrollbar, 0px));
+  }
+}
 
 /* ---------- Player ---------- */
 
+.player { container: player / inline-size; }
+
 .now-chapter {
   margin: 0;
-  font-family: var(--serif);
-  font-size: 1.375rem;
-  font-weight: 500;
-  line-height: 1.25;
+  font-size: 1.75rem;
+  font-weight: 450;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
 }
 
-.now-detail {
+.now-detail,
+.times {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  margin: 0.35rem 0 1rem;
-  font-size: 0.9375rem;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
 }
+.now-detail { margin: 0.3rem 0 1.1rem; font-size: 1rem; font-style: italic; }
+.times { margin-top: 0.4rem; color: var(--muted); font-size: 0.9375rem; }
 
 .timeline {
   position: relative;
-  height: 44px;
+  height: 40px;
   border-radius: 4px;
 }
-.timeline:has(.timeline-input:focus-visible) { outline: 2px solid var(--ribbon); outline-offset: 4px; }
+.timeline:has(.timeline-input:focus-visible) { outline: 1.5px solid var(--ink); outline-offset: 4px; }
+/* Chrome counts a click on a slider or select as focus-visible; after a pointer
+   press, no ring (main.tsx sets data-input). The keyboard still gets one. */
+:root[data-input='pointer'] .timeline:has(.timeline-input:focus-visible) { outline: none; }
+:root[data-input='pointer'] .speed select:focus-visible { outline: none; }
 
+/* A thin bar: chapter segments laid end to end, read like a ruler. */
 .timeline-track {
   position: absolute;
-  inset: 8px 0;
+  inset: 17px 0;
   overflow: hidden;
   border-radius: 3px;
 }
@@ -305,16 +507,23 @@ h2 { font-size: 1.25rem; margin: 0 0 1.25rem; }
 }
 .segment.current .segment-fill { background: var(--ribbon); }
 
+/* The playhead: a short upright with a soft red glow, the one lit thing on the bar. */
 .timeline-head {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 9px;
+  bottom: 9px;
   pointer-events: none;
   width: 3px;
   margin-left: -1.5px;
   border-radius: 2px;
   background: var(--ribbon);
+  box-shadow: 0 0 10px rgb(200 50 62 / 0.6);
 }
+
+/* A read-only bar (library progress): the same bar, without the slider. */
+.timeline-static { height: 14px; }
+.timeline-static .timeline-track { inset: 5px 0; }
+.timeline-static .timeline-head { top: 1px; bottom: 1px; }
 
 .timeline-input {
   position: absolute;
@@ -326,21 +535,40 @@ h2 { font-size: 1.25rem; margin: 0 0 1.25rem; }
   cursor: pointer;
 }
 
-.times {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 0.4rem;
-  color: var(--muted);
-  font-size: 0.875rem;
-  font-variant-numeric: tabular-nums;
+/* Transport row: equal side cells keep the controls centered on the timeline's
+   width; status sits on the left edge, speed on the right edge. */
+.transport {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas: 'status controls speed';
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  font-size: 1rem;
 }
 
 .controls {
+  grid-area: controls;
   display: flex;
-  justify-content: center;
   align-items: center;
   gap: 0.75rem;
-  margin: 1.5rem 0 1.25rem;
+}
+
+.status { grid-area: status; justify-self: start; color: var(--muted); font-style: italic; }
+.speed { grid-area: speed; justify-self: end; }
+
+/* Too narrow for three cells: controls on their own row, then status and speed
+   on the edges below. Measured on the player, not the window, because the
+   player is narrower than the window in the two-column layout. */
+@container player (width < 36rem) {
+  .transport {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      'controls controls'
+      'status speed';
+    row-gap: 1.25rem;
+  }
+  .controls { justify-self: center; gap: 0.35rem; }
 }
 
 .control {
@@ -352,90 +580,342 @@ h2 { font-size: 1.25rem; margin: 0 0 1.25rem; }
   border: none;
   border-radius: 50%;
   background: transparent;
+  color: var(--ink);
   cursor: pointer;
 }
-.control:hover { background: var(--rule); }
 
 .control-play {
-  width: 4.25rem;
-  height: 4.25rem;
+  width: 4.5rem;
+  height: 4.5rem;
   margin: 0 0.5rem;
   background: var(--ink);
   color: var(--page);
-}
-.control-play:hover { background: var(--ink); opacity: 0.88; }
-
-.player-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  font-size: 0.9375rem;
 }
 
 .speed { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--muted); }
 .speed select {
   padding: 0.25rem 0.5rem;
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--page);
   color: var(--ink);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
-.status { color: var(--muted); }
+/*
+  Where supported (Chromium), the select and its popup are styled like the rest
+  of the page instead of the OS's list. It's still a real <select>, so keyboard
+  and screen reader behaviour stay native. Other browsers keep their native
+  picker (on iOS, the system wheel).
+*/
+@supports (appearance: base-select) {
+  .speed select,
+  .speed select::picker(select) { appearance: base-select; }
+
+  .speed select {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 4.75rem;
+    padding: 0.3rem 0.6rem 0.3rem 0.7rem;
+    cursor: pointer;
+  }
+  .speed select:open { outline: none; border-color: var(--muted); }
+
+  /* A small chevron that turns over while the list is open. */
+  .speed select::picker-icon {
+    content: '';
+    width: 0.4rem;
+    height: 0.4rem;
+    margin-left: auto;
+    border-right: 1.5px solid var(--muted);
+    border-bottom: 1.5px solid var(--muted);
+    transform: translateY(-25%) rotate(45deg);
+    transition: transform var(--release) var(--ease-out);
+  }
+  .speed select:open::picker-icon { transform: translateY(25%) rotate(225deg); }
+
+  /* The list: right-aligned under the control (which sits on the right edge),
+     flipping above it if there's no room below. */
+  .speed select::picker(select) {
+    position-area: block-end span-inline-start;
+    position-try-fallbacks: flip-block;
+    min-width: anchor-size(width);
+    margin-block: 0.35rem;
+    padding: 0.3rem;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: #0d0d0c;
+    color: var(--ink);
+    box-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.9);
+    opacity: 1;
+    translate: 0 0;
+    transition:
+      opacity 120ms var(--ease-out),
+      translate 120ms var(--ease-out);
+  }
+  @starting-style {
+    .speed select:open::picker(select) { opacity: 0; translate: 0 -4px; }
+  }
+
+  .speed option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 5px;
+    font-variant-numeric: lining-nums tabular-nums;
+    cursor: pointer;
+    transition: background-color var(--release) var(--ease-out);
+  }
+  .speed option::checkmark { content: '✓'; color: var(--ink); width: 0.9em; }
+  .speed option:not(:checked)::checkmark { visibility: hidden; }
+  .speed option:checked { font-weight: 600; }
+  .speed option:focus-visible { outline: none; background: var(--hover-tint); }
+  .speed option:active { background: var(--press-tint); transition-duration: var(--press); }
+  @media (hover: hover) {
+    .speed option:hover { background: var(--hover-tint); }
+  }
+}
 
 /* ---------- Chapter list ---------- */
 
-.chapters { margin-top: 3rem; }
+.chapters { margin-top: 2.75rem; }
+.chapters .section-head { margin-bottom: 0; }
 
 .chapters ol {
   list-style: none;
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--rule);
 }
 
+/* Rows are table-like: the rules run edge to edge, and the text is inset by the
+   same amount on both sides. The current-chapter ribbon sits in the left inset;
+   while audio plays, a level meter sits beside the chapter's length. */
 .chapter {
   position: relative;
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
+  align-items: center;
+  gap: 0.75rem;
   width: 100%;
-  padding: 0.7rem 0.25rem 0.7rem 1rem;
+  padding: 0.75rem 0.75rem;
   border: none;
   border-bottom: 1px solid var(--rule);
   background: none;
+  font-size: 1.0625rem;
   text-align: left;
   cursor: pointer;
 }
-.chapter:hover .chapter-title { text-decoration: underline; text-underline-offset: 3px; }
+.chapter-title { flex: 1; min-width: 0; }
 
-.chapter-length { color: var(--muted); font-variant-numeric: tabular-nums; }
+.chapter-length { color: var(--faint); font-variant-numeric: lining-nums tabular-nums; }
 
 .chapter[data-state='played'] .chapter-title { color: var(--muted); }
 
 .chapter[data-state='current'] .chapter-title { font-weight: 600; }
+.chapter[data-state='current'] .chapter-length { color: var(--muted); }
 .chapter[data-state='current']::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 0.55rem;
-  bottom: 0.55rem;
-  width: 4px;
+  top: 0.6rem;
+  bottom: 0.6rem;
+  width: 3px;
   background: var(--ribbon);
   border-radius: 1px;
 }
 
-/* ---------- Small screens ---------- */
+/* The level meter: still when paused, rising and falling while playing. */
+.level-meter { flex: none; fill: var(--ribbon); }
+.level-meter rect { transform-box: fill-box; transform-origin: bottom; }
+.level-meter.active rect { animation: level 900ms ease-in-out infinite alternate; }
+.level-meter.active rect:nth-child(2) { animation-duration: 700ms; animation-delay: -300ms; }
+.level-meter.active rect:nth-child(3) { animation-duration: 1100ms; animation-delay: -500ms; }
+@keyframes level {
+  from { transform: scaleY(0.35); }
+  to { transform: scaleY(1); }
+}
 
-@media (max-width: 560px) {
-  .book-grid { grid-template-columns: repeat(2, 1fr); gap: 1.75rem 1rem; }
-  .continue-item { grid-template-columns: 88px 1fr; }
-  .book-header { grid-template-columns: 112px 1fr; gap: 1.1rem; align-items: center; }
-  .controls { gap: 0.25rem; }
-  .now-detail { flex-direction: column; gap: 0.1rem; }
+/* ---------- Now playing bar ---------- */
+
+/*
+  A pane of smoked glass along the bottom: black, slightly translucent, blurring
+  the page that scrolls under it, with the whole book's progress as a red line
+  along its top edge.
+*/
+.now-bar-spacer { height: calc(5rem + env(safe-area-inset-bottom)); }
+
+.now-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: rgb(10 10 9 / 0.82);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+  border-top: 1px solid var(--rule);
+}
+
+.now-bar-progress {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+}
+.now-bar-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--ribbon);
+  box-shadow: 0 0 8px rgb(200 50 62 / 0.6);
+}
+
+.now-bar-inner {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  height: 5rem;
+}
+
+.now-bar-book {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+  text-decoration: none;
+}
+.now-bar-cover { flex: none; width: 3.25rem; }
+.now-bar-text { display: grid; min-width: 0; line-height: 1.25; }
+.now-bar-text > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.now-bar-title { font-size: 1.125rem; font-weight: 500; }
+.now-bar-text .muted { font-size: 0.9375rem; font-style: italic; }
+
+.now-bar-controls { display: flex; align-items: center; gap: 0.35rem; }
+.now-bar-play.control-play { width: 3.25rem; height: 3.25rem; margin: 0 0.35rem; }
+
+.now-bar-time {
+  justify-self: end;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* Phones: the book and the controls; time remaining drops out. */
+@media (max-width: 39.99rem) {
+  .now-bar-inner { grid-template-columns: 1fr auto; }
+  .now-bar-time { display: none; }
+  .now-bar-controls .control:not(.now-bar-play) { width: 2.5rem; height: 2.5rem; }
+}
+
+/* ---------- Interaction ---------- */
+
+/*
+  Every clickable thing answers a press the moment it happens: buttons dip,
+  rows darken, covers settle. Hover styles only apply on devices that can
+  hover; on touch screens :hover sticks to whatever was last tapped.
+*/
+
+a, button, select, input {
+  /* Replace the browser's grey tap flash with the press states below, and
+     drop the double-tap-to-zoom wait so taps register immediately. */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+/* Rapid taps on a chapter or a skip button shouldn't select text. */
+button { -webkit-user-select: none; user-select: none; }
+
+/* Buttons */
+.control,
+.resume {
+  transition:
+    transform var(--release) var(--ease-out),
+    background-color var(--release) var(--ease-out),
+    opacity var(--release) var(--ease-out);
+}
+.control:active {
+  transform: scale(0.9);
+  background: var(--press-tint);
+  transition-duration: var(--press);
+}
+.control-play:active,
+.resume:active { transform: scale(0.95); background: var(--ink); opacity: 0.8; transition-duration: var(--press); }
+
+/* Icons that move, only in answer to a press or a state change. */
+.pp-half { transition: d 220ms var(--ease-out); }
+.skip-arc { transform-box: view-box; transform-origin: 12px 12px; transition: transform 260ms var(--ease-out); }
+.control:active .skip-arc { transform: rotate(-28deg); transition-duration: 90ms; }
+.control:active .skip-arc-forward { transform: rotate(28deg); }
+.skip-label { font-family: var(--text); font-variant-numeric: lining-nums; }
+
+/* Covers settle on press. */
+.book-tile .cover,
+.continue-item .cover,
+.feature-cover .cover {
+  transition:
+    transform 220ms var(--ease-out),
+    opacity 220ms var(--ease-out);
+}
+.book-tile:active .cover,
+.continue-item:active .cover,
+.feature-cover:active .cover {
+  transform: scale(0.97);
+  transition-duration: var(--press);
+}
+
+/* Chapter rows: the whole row is the target, so the whole row responds. */
+.chapter { transition: background-color var(--release) var(--ease-out); }
+.chapter:active { background: var(--press-tint); transition-duration: var(--press); }
+
+.back { transition: color var(--release) var(--ease-out), opacity var(--release) var(--ease-out); }
+.back:active { opacity: 0.55; transition-duration: var(--press); }
+
+.speed select { cursor: pointer; transition: border-color var(--release) var(--ease-out); }
+
+/* Timeline: the bar thickens under the pointer, and a little more while
+   dragging, so it's clear the bar is grabbable and grabbed. */
+.timeline-track { transition: inset 140ms var(--ease-out); }
+.timeline:has(.timeline-input:active) .timeline-track { inset: 14px 0; }
+
+@media (hover: hover) {
+  .control:hover { background: var(--hover-tint); }
+  .control-play:hover,
+  .resume:hover { background: var(--ink); opacity: 0.88; }
+  .control-play:active,
+  .resume:active { opacity: 0.8; }
+
+  /* Covers brighten a touch under the pointer; titles underline. */
+  .book-tile:hover .cover,
+  .continue-item:hover .cover,
+  .feature-cover:hover .cover { opacity: 0.88; }
+  .book-tile:hover .book-title,
+  .continue-item:hover .book-title,
+  .feature-title a:hover,
+  .now-bar-book:hover .now-bar-title {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 4px;
+  }
+
+  .chapter:hover { background: var(--hover-tint); }
+  .chapter:active { background: var(--press-tint); }
+
+  .back:hover { color: var(--ink); }
+  .speed select:hover { border-color: var(--muted); }
+  .timeline:not(.timeline-static):hover .timeline-track { inset: 15px 0; }
+  .timeline:has(.timeline-input:active) .timeline-track { inset: 14px 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; }
+  /* Keep the tints (they aren't motion); drop movement, morphing and scaling. */
+  .control, .resume, .book-tile .cover, .continue-item .cover, .feature-cover .cover,
+  .timeline-track, .pp-half, .skip-arc,
+  .speed select::picker(select), .speed select::picker-icon { transition: none; }
+  .control:active, .resume:active, .control-play:active,
+  .book-tile:active .cover, .continue-item:active .cover, .feature-cover:active .cover,
+  .control:active .skip-arc { transform: none !important; }
+  .level-meter.active rect { animation: none; }
 }
