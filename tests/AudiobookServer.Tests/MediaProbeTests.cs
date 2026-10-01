@@ -4,10 +4,13 @@ namespace AudiobookServer.Tests;
 
 public class MediaProbeTests
 {
-    private const string M4bPath =
-        "/mnt/media/audiobooks/The Lies of Locke Lamora - Scott Lynch m4b/01 00_ Prologue - The Boy Who Stole Too Much 01.m4b";
+    // The assertions below are specific to this exact file. Set AUDIOBOOK_SAMPLE_M4B to a
+    // local copy of it to run the test off the server; otherwise it skips.
+    private static readonly string M4bPath =
+        Environment.GetEnvironmentVariable("AUDIOBOOK_SAMPLE_M4B")
+        ?? "/mnt/media/audiobooks/The Lies of Locke Lamora - Scott Lynch m4b/01 00_ Prologue - The Boy Who Stole Too Much 01.m4b";
 
-    [Fact]
+    [SkippableFact]
     public async Task Probes_an_m4b_file()
     {
         Skip.IfNot(File.Exists(M4bPath), "Sample file not present.");
@@ -27,6 +30,6 @@ public class MediaProbeTests
     {
         var probe = new FfprobeMediaProbe();
         await Assert.ThrowsAsync<MediaProbeException>(
-            () => probe.ProbeAsync("/tmp/definitely-not-here.m4b"));
+            () => probe.ProbeAsync(Path.Combine(Path.GetTempPath(), "definitely-not-here.m4b")));
     }
 }
