@@ -33,6 +33,7 @@ public class AudiobookDbContext(DbContextOptions<AudiobookDbContext> options)
             e.HasIndex(x => x.RootPath).IsUnique();
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.RootPath).HasMaxLength(1000);
+            e.Property(x => x.Credit).HasMaxLength(200);
         });
 
         b.Entity<Book>(e =>

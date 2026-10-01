@@ -6,7 +6,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AudiobookServer.Api.Endpoints;
 
-public sealed record CreateLibraryRequest(string Name, string RootPath);
+/// <summary>IsPublic defaults to false: a new library is private until said otherwise.</summary>
+public sealed record CreateLibraryRequest(string Name, string RootPath, bool IsPublic = false, string? Credit = null);
+
+/// <summary>Only the fields present change. An empty Credit removes it.</summary>
+public sealed record UpdateLibraryRequest(string? Name, bool? IsPublic, string? Credit);
 
 /// <summary>
 /// Managing libraries: admin only. These responses include server paths, and a scan
@@ -29,6 +33,8 @@ public static class LibraryEndpoints
                     l.Id,
                     l.Name,
                     l.RootPath,
+                    l.IsPublic,
+                    l.Credit,
                     l.LastScanStartedAt,
                     l.LastScanCompletedAt,
                     Books = l.Books.Count
@@ -45,6 +51,8 @@ public static class LibraryEndpoints
                     l.Id,
                     l.Name,
                     l.RootPath,
+                    l.IsPublic,
+                    l.Credit,
                     l.LastScanStartedAt,
                     l.LastScanCompletedAt,
                     Books = l.Books.Count
@@ -64,13 +72,42 @@ public static class LibraryEndpoints
                 Id = Guid.NewGuid(),
                 Name = req.Name,
                 RootPath = req.RootPath,
+                IsPublic = req.IsPublic,
+                Credit = string.IsNullOrWhiteSpace(req.Credit) ? null : req.Credit.Trim(),
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
             db.Libraries.Add(library);
             await db.SaveChangesAsync();
 
-            return Results.Created($"/api/libraries/{library.Id}", new { library.Id, library.Name, library.RootPath });
+            return Results.Created(
+                $"/api/libraries/{library.Id}",
+                new { library.Id, library.Name, library.RootPath, library.IsPublic, library.Credit });
+        });
+
+        // Making a library public or private takes effect on the next request: visibility
+        // is checked per request, never cached in a session.
+        libraries.MapPatch("/{id:guid}", async (Guid id, UpdateLibraryRequest req, AudiobookDbContext db, CancellationToken ct) =>
+        {
+            var library = await db.Libraries.FirstOrDefaultAsync(l => l.Id == id, ct);
+            if (library is null)
+                return Results.NotFound();
+
+            if (req.Name is not null)
+            {
+                if (string.IsNullOrWhiteSpace(req.Name))
+                    return Results.BadRequest(new { error = "name must not be empty." });
+                library.Name = req.Name.Trim();
+            }
+
+            if (req.IsPublic is { } isPublic)
+                library.IsPublic = isPublic;
+
+            if (req.Credit is not null)
+                library.Credit = string.IsNullOrWhiteSpace(req.Credit) ? null : req.Credit.Trim();
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { library.Id, library.Name, library.RootPath, library.IsPublic, library.Credit });
         });
 
         // Runs inside the request, on the request's cancellation token: through

@@ -46,13 +46,15 @@ public static class ProgressEndpoints
     public static IEndpointRouteBuilder MapProgressEndpoints(this IEndpointRouteBuilder app)
     {
         // Every position for the signed-in user, most recent first. Feeds the web
-        // client's progress store ("continue listening", resume points).
+        // client's progress store ("continue listening", resume points). Positions in a
+        // library that has since become private stay in the table but aren't returned.
         app.MapGet("/api/progress", async (ClaimsPrincipal principal, AudiobookDbContext db, CancellationToken ct) =>
         {
             var userId = principal.GetUserId();
+            var visible = db.VisibleBooks(principal);
             return await db.PlaybackPositions
                 .AsNoTracking()
-                .Where(p => p.UserId == userId)
+                .Where(p => p.UserId == userId && visible.Any(b => b.Id == p.BookId))
                 .OrderByDescending(p => p.ReportedAt)
                 .Select(p => new ProgressDto(
                     p.BookId, p.PositionSeconds, p.ReportedAt, p.UpdatedAt,
@@ -63,6 +65,10 @@ public static class ProgressEndpoints
         app.MapGet("/api/books/{bookId:guid}/progress", async (
             Guid bookId, ClaimsPrincipal principal, AudiobookDbContext db, CancellationToken ct) =>
         {
+            // 404 for a book the user can't see; 204 is "visible, but not started".
+            if (!await db.VisibleBooks(principal).AnyAsync(b => b.Id == bookId, ct))
+                return Results.NotFound();
+
             var userId = principal.GetUserId();
             var progress = await db.PlaybackPositions
                 .AsNoTracking()
@@ -90,7 +96,7 @@ public static class ProgressEndpoints
             {
                 try
                 {
-                    return await ApplyAsync(report, userId, db, ct);
+                    return await ApplyAsync(report, principal, userId, db, ct);
                 }
                 catch (DbUpdateException ex) when (attempt < 3 && IsUniqueViolation(ex))
                 {
@@ -103,14 +109,15 @@ public static class ProgressEndpoints
     }
 
     private static async Task<IResult> ApplyAsync(
-        ProgressReport report, Guid userId, AudiobookDbContext db, CancellationToken ct)
+        ProgressReport report, ClaimsPrincipal principal, Guid userId, AudiobookDbContext db, CancellationToken ct)
     {
-        var duration = await db.Books
+        var duration = await db.VisibleBooks(principal)
             .Where(b => b.Id == report.BookId)
             .Select(b => (double?)b.DurationSeconds)
             .FirstOrDefaultAsync(ct);
 
-        // Most often a book removed by a rescan while a client still had it.
+        // Most often a book removed by a rescan while a client still had it. Also a book
+        // the user can't see: same answer, so a report can't probe for private books.
         if (duration is null)
             return Results.NotFound();
 

@@ -5,6 +5,9 @@ export interface Library {
   id: string
   name: string
   rootPath: string
+  /** Visible to every signed-in user, not just admins. */
+  isPublic: boolean
+  credit: string | null
   lastScanStartedAt: string | null
   lastScanCompletedAt: string | null
   books: number
@@ -48,6 +51,8 @@ export interface BookDetail {
   publishedYear: number | null
   durationSeconds: number
   hasCover: boolean
+  /** The library's credit line, e.g. "Public domain · LibriVox". */
+  credit: string | null
   files: BookFile[]
   chapters: Chapter[]
 }

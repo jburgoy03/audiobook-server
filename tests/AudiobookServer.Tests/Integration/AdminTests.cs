@@ -5,6 +5,7 @@ using AudiobookServer.Api.Auth;
 using AudiobookServer.Api.Endpoints;
 using AudiobookServer.Core.Entities;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AudiobookServer.Tests.Integration;
@@ -23,6 +24,7 @@ public class AdminTests(ApiFixture api)
         { "GET", "/api/libraries" },
         { "GET", "/api/libraries/{library}" },
         { "POST", "/api/libraries" },
+        { "PATCH", "/api/libraries/{library}" },
         { "POST", "/api/libraries/{library}/scan" },
         { "POST", "/api/libraries/{library}/scan?force=true" },
     };
@@ -67,6 +69,37 @@ public class AdminTests(ApiFixture api)
         using var client = await api.CookieClientAsync();
         using var response = await client.GetAsync("/api/libraries");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task The_admin_can_make_a_library_public_and_private_again()
+    {
+        var bookId = await api.CreateBookAsync(60);
+        await using (var db = api.NewDbContext())
+        {
+            // Its own library, so flipping it can't disturb other tests.
+            var library = new Library
+            {
+                Id = Guid.NewGuid(), Name = "Flip", RootPath = Path.GetTempPath(), CreatedAt = DateTimeOffset.UtcNow,
+            };
+            db.Libraries.Add(library);
+            await db.SaveChangesAsync();
+            await db.Books.Where(b => b.Id == bookId)
+                .ExecuteUpdateAsync(s => s.SetProperty(b => b.LibraryId, library.Id));
+
+            using var admin = await api.CookieClientAsync();
+            using var visitor = await api.CookieClientAsync(ApiFixture.VisitorUsername, ApiFixture.VisitorPassword);
+
+            Assert.Equal(HttpStatusCode.NotFound, (await visitor.GetAsync($"/api/books/{bookId}")).StatusCode);
+
+            var open = await admin.PatchAsJsonAsync($"/api/libraries/{library.Id}", new { isPublic = true });
+            Assert.Equal(HttpStatusCode.OK, open.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await visitor.GetAsync($"/api/books/{bookId}")).StatusCode);
+
+            var close = await admin.PatchAsJsonAsync($"/api/libraries/{library.Id}", new { isPublic = false });
+            Assert.Equal(HttpStatusCode.OK, close.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await visitor.GetAsync($"/api/books/{bookId}")).StatusCode);
+        }
     }
 
     [Fact]
@@ -137,7 +170,7 @@ public class AdminTests(ApiFixture api)
     {
         var request = new HttpRequestMessage(
             new HttpMethod(method), route.Replace("{library}", Guid.NewGuid().ToString()));
-        if (method == "POST")
+        if (method is "POST" or "PATCH")
             request.Content = JsonContent.Create(new { });
         return request;
     }

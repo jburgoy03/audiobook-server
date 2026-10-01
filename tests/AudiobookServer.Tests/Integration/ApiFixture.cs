@@ -42,7 +42,18 @@ public sealed class ApiFixture : IAsyncLifetime
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "audiobook-tests-" + Guid.NewGuid().ToString("N"));
 
-    private Guid _libraryId;
+    private string CoversDirectory => Path.Combine(_root, "covers");
+
+    /// <summary>The fixture's original library. Private, as every library is by default.</summary>
+    public Guid PrivateLibraryId { get; private set; }
+
+    public Guid PublicLibraryId { get; private set; }
+
+    /// <summary>A streamable book with a cover, in the private library. For the visibility matrix.</summary>
+    public Guid PrivateBookId { get; private set; }
+
+    /// <summary>A streamable book with a cover, in the public library. For the visibility matrix.</summary>
+    public Guid PublicBookId { get; private set; }
 
     public WebApplicationFactory<Program> Factory { get; private set; } = null!;
 
@@ -54,8 +65,12 @@ public sealed class ApiFixture : IAsyncLifetime
         await _postgres.StartAsync();
 
         var libraryRoot = Path.Combine(_root, "library");
-        Directory.CreateDirectory(Path.Combine(libraryRoot, "Book"));
-        await File.WriteAllBytesAsync(Path.Combine(libraryRoot, "Book", "01.mp3"), new byte[4096]);
+        var publicRoot = Path.Combine(_root, "public");
+        foreach (var root in new[] { libraryRoot, publicRoot })
+        {
+            Directory.CreateDirectory(Path.Combine(root, "Book"));
+            await File.WriteAllBytesAsync(Path.Combine(root, "Book", "01.mp3"), new byte[4096]);
+        }
 
         await using (var db = NewDbContext())
         {
@@ -68,12 +83,24 @@ public sealed class ApiFixture : IAsyncLifetime
                 RootPath = libraryRoot,
                 CreatedAt = DateTimeOffset.UtcNow,
             };
-            db.Libraries.Add(library);
+            var publicLibrary = new Library
+            {
+                Id = Guid.NewGuid(),
+                Name = "Public",
+                RootPath = publicRoot,
+                IsPublic = true,
+                Credit = "Public domain · Test",
+                CreatedAt = DateTimeOffset.UtcNow,
+            };
+            db.Libraries.AddRange(library, publicLibrary);
             await db.SaveChangesAsync();
-            _libraryId = library.Id;
+            PrivateLibraryId = library.Id;
+            PublicLibraryId = publicLibrary.Id;
         }
 
         StreamableBookId = await CreateBookAsync(3600, relativeFilePath: "Book/01.mp3");
+        PrivateBookId = await CreateBookAsync(3600, "Book/01.mp3", PrivateLibraryId, withCover: true);
+        PublicBookId = await CreateBookAsync(3600, "Book/01.mp3", PublicLibraryId, withCover: true);
 
         // Environment variables rather than WebApplicationFactory settings: Program.cs
         // reads some configuration (key and cover directories) before Build(), and
@@ -83,7 +110,7 @@ public sealed class ApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("Auth__SeedUser__Username", Username);
         Environment.SetEnvironmentVariable("Auth__SeedUser__Password", Password);
         Environment.SetEnvironmentVariable("DataProtection__KeysDirectory", Path.Combine(_root, "keys"));
-        Environment.SetEnvironmentVariable("Covers__Directory", Path.Combine(_root, "covers"));
+        Environment.SetEnvironmentVariable("Covers__Directory", CoversDirectory);
 
         Factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(b => b.UseEnvironment("Testing"));
@@ -92,6 +119,12 @@ public sealed class ApiFixture : IAsyncLifetime
         _ = Factory.Server;
 
         await CreateUserAsync(VisitorUsername, VisitorPassword);
+    }
+
+    public async Task<Guid> UserIdAsync(string username)
+    {
+        await using var db = NewDbContext();
+        return await db.Users.Where(u => u.UserName == username).Select(u => u.Id).SingleAsync();
     }
 
     /// <summary>Creates a user (not an admin) through Identity, as the app would.</summary>
@@ -118,15 +151,33 @@ public sealed class ApiFixture : IAsyncLifetime
             .UseNpgsql(_postgres.GetConnectionString())
             .Options);
 
-    /// <summary>Inserts a book with one file, without scanning. Returns its ID.</summary>
-    public async Task<Guid> CreateBookAsync(double durationSeconds, string relativeFilePath = "missing.mp3")
+    /// <summary>
+    /// Inserts a book with one file, without scanning. Returns its ID. Goes in the
+    /// private library unless told otherwise. withCover writes a stand-in image to the
+    /// cover directory, so the cover endpoint has something to serve.
+    /// </summary>
+    public async Task<Guid> CreateBookAsync(
+        double durationSeconds,
+        string relativeFilePath = "missing.mp3",
+        Guid? libraryId = null,
+        bool withCover = false)
     {
         await using var db = NewDbContext();
         var id = Guid.NewGuid();
+
+        string? coverPath = null;
+        if (withCover)
+        {
+            Directory.CreateDirectory(CoversDirectory);
+            coverPath = $"{id}.jpg";
+            await File.WriteAllBytesAsync(Path.Combine(CoversDirectory, coverPath), [0xFF, 0xD8, 0xFF, 0xD9]);
+        }
+
         db.Books.Add(new Book
         {
             Id = id,
-            LibraryId = _libraryId,
+            LibraryId = libraryId ?? PrivateLibraryId,
+            CoverPath = coverPath,
             Title = "Book " + id.ToString("N")[..6],
             RelativePath = id.ToString("N"),
             DurationSeconds = durationSeconds,

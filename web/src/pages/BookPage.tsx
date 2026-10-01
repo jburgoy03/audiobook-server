@@ -53,6 +53,7 @@ function BookView({ id }: { id: string }) {
               {book.subtitle && <p className="book-subtitle">{book.subtitle}</p>}
               <p className="book-credit">by {book.author ?? 'Unknown author'}</p>
               {book.narrator && <p className="muted">Read by {book.narrator}</p>}
+              {book.credit && <p className="muted">{book.credit}</p>}
             </div>
           </header>
           <div className="book-main">

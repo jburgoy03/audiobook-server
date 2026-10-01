@@ -20,6 +20,7 @@ public class AuthTests(ApiFixture api)
     {
         { "GET", "/api/libraries" },
         { "POST", "/api/libraries" },
+        { "PATCH", "/api/libraries/{library}" },
         { "POST", "/api/libraries/{library}/scan" },
         { "GET", "/api/books" },
         { "GET", "/api/books/{book}" },
