@@ -110,14 +110,21 @@ public static class AuthSetup
                 o.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
             })
             .AddEntityFrameworkStores<AudiobookDbContext>()
+            .AddClaimsPrincipalFactory<AudiobookClaimsPrincipalFactory>()
             .AddSignInManager();
 
         // Secure by default: every endpoint needs a signed-in user unless it says
         // otherwise. Login, refresh, logout and the web client's shell opt out.
+        // Admin endpoints ask for more: a signed-in user with the admin claim. Signed
+        // out is still a 401 (challenge); signed in without the claim is a 403.
         services.AddAuthorizationBuilder()
             .SetFallbackPolicy(new AuthorizationPolicyBuilder(CookieOrBearer)
                 .RequireAuthenticatedUser()
-                .Build());
+                .Build())
+            .AddPolicy(AuthPolicies.Admin, p => p
+                .AddAuthenticationSchemes(CookieOrBearer)
+                .RequireAuthenticatedUser()
+                .RequireClaim(AuthPolicies.AdminClaim, "true"));
 
         return services;
     }

@@ -82,66 +82,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapAuthEndpoints();
 app.MapProgressEndpoints();
-
-app.MapGet("/api/libraries", async (AudiobookDbContext db, CancellationToken ct) =>
-    await db.Libraries
-        .AsNoTracking()
-        .OrderBy(l => l.Name)
-        .Select(l => new
-        {
-            l.Id,
-            l.Name,
-            l.RootPath,
-            l.LastScanStartedAt,
-            l.LastScanCompletedAt,
-            Books = l.Books.Count
-        })
-        .ToListAsync(ct));
-
-app.MapGet("/api/libraries/{id:guid}", async (Guid id, AudiobookDbContext db, CancellationToken ct) =>
-{
-    var library = await db.Libraries
-        .AsNoTracking()
-        .Where(l => l.Id == id)
-        .Select(l => new
-        {
-            l.Id,
-            l.Name,
-            l.RootPath,
-            l.LastScanStartedAt,
-            l.LastScanCompletedAt,
-            Books = l.Books.Count
-        })
-        .FirstOrDefaultAsync(ct);
-
-    return library is null ? Results.NotFound() : Results.Ok(library);
-});
-
-app.MapPost("/api/libraries", async (CreateLibraryRequest req, AudiobookDbContext db) =>
-{
-    if (!Directory.Exists(req.RootPath))
-        return Results.BadRequest(new { error = $"Path not found on server: {req.RootPath}" });
-
-    var library = new Library
-    {
-        Id = Guid.NewGuid(),
-        Name = req.Name,
-        RootPath = req.RootPath,
-        CreatedAt = DateTimeOffset.UtcNow
-    };
-
-    db.Libraries.Add(library);
-    await db.SaveChangesAsync();
-
-    return Results.Created($"/api/libraries/{library.Id}", new { library.Id, library.Name, library.RootPath });
-});
-
-app.MapPost("/api/libraries/{id:guid}/scan", async (
-    Guid id, bool? force, ILibraryScanService scanner, CancellationToken ct) =>
-{
-    var report = await scanner.ScanAsync(id, force ?? false, ct);
-    return Results.Ok(report);
-});
+app.MapLibraryEndpoints();
 
 app.MapGet("/api/books", async (AudiobookDbContext db) =>
     await db.Books
@@ -293,8 +234,6 @@ app.MapFallback("/api/{**path}", () => Results.NotFound());
 app.MapFallbackToFile("index.html").AllowAnonymous();
 
 app.Run();
-
-record CreateLibraryRequest(string Name, string RootPath);
 
 // Lets the integration tests' WebApplicationFactory<Program> see the entry point.
 public partial class Program { }

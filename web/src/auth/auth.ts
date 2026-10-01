@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { flushSync } from 'react-dom'
 import { api, HttpError, setUnauthorizedHandler, UnauthorizedError } from '../api/client'
+import type { CurrentUser } from '../api/types'
 import { progressStore } from '../player/progress'
 
 /**
@@ -18,7 +19,7 @@ export type AuthState =
   | { status: 'unreachable'; message: string }
   | { status: 'signedOut'; expired?: boolean }
   | { status: 'signingOut' }
-  | { status: 'signedIn'; username: string }
+  | { status: 'signedIn'; username: string; isAdmin: boolean }
 
 let state: AuthState = { status: 'checking' }
 const listeners = new Set<() => void>()
@@ -39,8 +40,8 @@ export function useAuth(): AuthState {
   return useSyncExternalStore(subscribe, () => state)
 }
 
-function signedIn(username: string) {
-  setState({ status: 'signedIn', username })
+function signedIn(me: CurrentUser) {
+  setState({ status: 'signedIn', username: me.username, isAdmin: me.isAdmin })
   void progressStore.start()
 }
 
@@ -57,7 +58,7 @@ export async function checkSession(): Promise<void> {
   setState({ status: 'checking' })
   try {
     const me = await api.me(false)
-    signedIn(me.username)
+    signedIn(me)
   } catch (e) {
     if (e instanceof UnauthorizedError) setState({ status: 'signedOut' })
     else setState({ status: 'unreachable', message: String(e) })
@@ -90,7 +91,7 @@ export async function login(username: string, password: string): Promise<void> {
     throw new Error('The server couldn’t be reached. Try again in a moment.', { cause: e })
   }
   const me = await api.me(false)
-  signedIn(me.username)
+  signedIn(me)
 }
 
 export async function logout(): Promise<void> {

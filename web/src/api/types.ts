@@ -55,6 +55,8 @@ export interface BookDetail {
 /** GET /api/auth/me */
 export interface CurrentUser {
   username: string
+  /** Shows admin controls. Convenience only: the server enforces admin on its own. */
+  isAdmin: boolean
 }
 
 /** What the server holds for one book: GET /api/progress, and inside a ProgressResult. */

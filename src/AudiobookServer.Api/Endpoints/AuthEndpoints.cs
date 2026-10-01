@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AudiobookServer.Api.Auth;
 using AudiobookServer.Core.Entities;
 using Microsoft.AspNetCore.Authentication.BearerToken;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -9,7 +10,7 @@ namespace AudiobookServer.Api.Endpoints;
 
 public sealed record LoginRequest(string Username, string Password);
 public sealed record RefreshRequest(string RefreshToken);
-public sealed record CurrentUser(string Username);
+public sealed record CurrentUser(string Username, bool IsAdmin);
 
 /// <summary>
 /// Login, refresh, logout and "who am I". Modelled on Identity's MapIdentityApi, minus
@@ -79,9 +80,10 @@ public static class AuthEndpoints
         }).AllowAnonymous();
 
         // The cookie is HttpOnly, so this is how the web client learns whether it's
-        // signed in: 200 or 401.
+        // signed in: 200 or 401. IsAdmin only decides which controls the client shows;
+        // the server enforces the Admin policy regardless.
         auth.MapGet("/me", (ClaimsPrincipal user) =>
-            TypedResults.Ok(new CurrentUser(user.Identity?.Name ?? "")));
+            TypedResults.Ok(new CurrentUser(user.Identity?.Name ?? "", user.IsAdmin())));
 
         return app;
     }

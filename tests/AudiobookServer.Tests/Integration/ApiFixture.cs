@@ -5,8 +5,10 @@ using System.Text.Json.Serialization;
 using AudiobookServer.Core.Data;
 using AudiobookServer.Core.Entities;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 
 namespace AudiobookServer.Tests.Integration;
@@ -20,8 +22,13 @@ namespace AudiobookServer.Tests.Integration;
 /// </summary>
 public sealed class ApiFixture : IAsyncLifetime
 {
+    /// <summary>The seeded account. The seeder makes it an admin.</summary>
     public const string Username = "listener";
     public const string Password = "correct horse battery staple";
+
+    /// <summary>A second account without admin, created after startup like any later user.</summary>
+    public const string VisitorUsername = "visitor";
+    public const string VisitorPassword = "a visitor's own passphrase";
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -83,6 +90,20 @@ public sealed class ApiFixture : IAsyncLifetime
 
         // Starts the host, which runs the user seeder.
         _ = Factory.Server;
+
+        await CreateUserAsync(VisitorUsername, VisitorPassword);
+    }
+
+    /// <summary>Creates a user (not an admin) through Identity, as the app would.</summary>
+    public async Task<User> CreateUserAsync(string username, string password)
+    {
+        using var scope = Factory.Services.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+        var user = new User { Id = Guid.NewGuid(), UserName = username, CreatedAt = DateTimeOffset.UtcNow };
+        var created = await users.CreateAsync(user, password);
+        if (!created.Succeeded)
+            throw new InvalidOperationException(string.Join("; ", created.Errors.Select(e => e.Description)));
+        return user;
     }
 
     public async Task DisposeAsync()
@@ -137,26 +158,28 @@ public sealed class ApiFixture : IAsyncLifetime
             HandleCookies = true,
         });
 
-    public async Task<HttpClient> CookieClientAsync()
+    /// <summary>Signed in with a cookie. Defaults to the seeded admin.</summary>
+    public async Task<HttpClient> CookieClientAsync(string username = Username, string password = Password)
     {
         var client = CreateClient();
         var response = await client.PostAsJsonAsync(
-            "/api/auth/login?useCookies=true", new { username = Username, password = Password });
+            "/api/auth/login?useCookies=true", new { username, password });
         response.EnsureSuccessStatusCode();
         return client;
     }
 
-    public async Task<TokenResponse> LoginForTokensAsync()
+    public async Task<TokenResponse> LoginForTokensAsync(string username = Username, string password = Password)
     {
         using var client = CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/login", new { username = Username, password = Password });
+        var response = await client.PostAsJsonAsync("/api/auth/login", new { username, password });
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<TokenResponse>(Json))!;
     }
 
-    public async Task<HttpClient> BearerClientAsync()
+    /// <summary>Signed in with a bearer token. Defaults to the seeded admin.</summary>
+    public async Task<HttpClient> BearerClientAsync(string username = Username, string password = Password)
     {
-        var tokens = await LoginForTokensAsync();
+        var tokens = await LoginForTokensAsync(username, password);
         var client = CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
         return client;
