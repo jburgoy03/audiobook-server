@@ -1,5 +1,6 @@
 using AudiobookServer.Core.Data;
 using AudiobookServer.Core.Entities;
+using AudiobookServer.Core.Media;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -10,7 +11,8 @@ public record ScanReport(
     int BooksUpdated,
     int BooksUnchanged,
     int BooksRemoved,
-    int Failures)
+    int Failures,
+    int FilesDurationCorrected)
 {
     public int TotalSeen => BooksAdded + BooksUpdated + BooksUnchanged;
 }
@@ -26,6 +28,13 @@ public class LibraryScanService(
     IBookScanner scanner,
     ILogger<LibraryScanService> logger) : ILibraryScanService
 {
+    // A file counts as corrected when its header duration missed by more than a few
+    // mp3 frames (~26ms each). A correctly padded CBR file lands within one frame.
+    private const double FileCorrectionThresholdSeconds = 0.1;
+
+    // Below this, a book's total correction isn't worth a warning.
+    private const double BookWarningThresholdSeconds = 1.0;
+
     public async Task<ScanReport> ScanAsync(
         Guid libraryId, bool force = false, CancellationToken ct = default)
     {
@@ -36,7 +45,7 @@ public class LibraryScanService(
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
 
-        int added = 0, updated = 0, unchanged = 0, removed = 0, failures = 0;
+        int added = 0, updated = 0, unchanged = 0, removed = 0, failures = 0, corrected = 0;
 
         foreach (var candidate in walker.FindBooks(library.RootPath))
         {
@@ -74,6 +83,8 @@ public class LibraryScanService(
 
                 foreach (var book in scanned)
                 {
+                    corrected += ReportDurationCorrections(book);
+
                     var match = existing.FirstOrDefault(b => b.RelativePath == book.Key);
 
                     if (match is null)
@@ -117,13 +128,61 @@ public class LibraryScanService(
         libraryToFinish.LastScanCompletedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 
-        var report = new ScanReport(added, updated, unchanged, removed, failures);
+        var report = new ScanReport(added, updated, unchanged, removed, failures, corrected);
         logger.LogInformation(
             "Scanned {Library}: {Added} added, {Updated} updated, {Unchanged} unchanged, " +
-            "{Removed} removed, {Failures} failed",
-            libraryToFinish.Name, added, updated, unchanged, removed, failures);
+            "{Removed} removed, {Failures} failed, {Corrected} file durations corrected",
+            libraryToFinish.Name, added, updated, unchanged, removed, failures, corrected);
 
         return report;
+    }
+
+    /// <summary>
+    /// Logs how far packet-counted durations moved from the header estimates, and
+    /// returns how many files moved meaningfully. One warning per book, not per file:
+    /// a 92-file book with a bad encoder should produce one line, not 92.
+    ///
+    /// The book total is a signed sum because that is the error a listener feels -
+    /// how far the last file's offset was off.
+    /// </summary>
+    private int ReportDurationCorrections(ScannedBook book)
+    {
+        var counted = book.Files
+            .Where(f => f.DurationSource == DurationSource.PacketCount)
+            .ToList();
+
+        var corrected = counted
+            .Where(f => Math.Abs(f.DurationSeconds - f.HeaderDurationSeconds) > FileCorrectionThresholdSeconds)
+            .ToList();
+
+        foreach (var f in corrected)
+        {
+            logger.LogDebug(
+                "{File}: header {Header:F3}s, counted {Counted:F3}s",
+                f.RelativePath, f.HeaderDurationSeconds, f.DurationSeconds);
+        }
+
+        var total = counted.Sum(f => f.DurationSeconds - f.HeaderDurationSeconds);
+        if (Math.Abs(total) >= BookWarningThresholdSeconds)
+        {
+            logger.LogWarning(
+                "{Title}: header durations were off by {Seconds:+0.0;-0.0}s across {Corrected} of {Files} files; using packet counts",
+                book.Title, total, corrected.Count, book.Files.Count);
+        }
+
+        // An mp3 still on its header duration means packet counting failed for it.
+        var fallbacks = book.Files.Count(f =>
+            f.DurationSource == DurationSource.Header &&
+            string.Equals(f.Codec, "mp3", StringComparison.OrdinalIgnoreCase));
+
+        if (fallbacks > 0)
+        {
+            logger.LogWarning(
+                "{Title}: packet count failed for {Count} mp3 files; using header durations, which may drift",
+                book.Title, fallbacks);
+        }
+
+        return corrected.Count;
     }
 
     /// <summary>

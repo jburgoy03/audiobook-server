@@ -100,9 +100,11 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
                 Sequence = index,
                 StartOffsetSeconds = offset,
                 DurationSeconds = p.DurationSeconds,
+                HeaderDurationSeconds = p.HeaderDurationSeconds ?? p.DurationSeconds,
+                DurationSource = p.DurationSource,
                 SizeBytes = p.SizeBytes,
                 Bitrate = p.Bitrate,
-                Codec = p.FormatName,
+                Codec = p.Codec ?? p.FormatName,
                 MimeType = MimeTypeFor(p.Path),
                 FileModifiedAt = SafeLastWrite(p.Path)
             });
