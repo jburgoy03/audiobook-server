@@ -1,9 +1,13 @@
-# The API on the server, Tailscale-only. Lives in /opt/docker/audiobook alongside
+# The API on the server. Lives in /opt/docker/audiobook alongside
 # its .env (see .env.example and docs/deploy.md). The image is built from the
 # source checkout: docker build -t audiobook-server:latest ~/projects/audiobook
 #
 # Postgres is not part of this stack: it's the existing audiobook-db container,
 # reached over its compose network by container name.
+#
+# Two ways in, and no router ports: the Tailscale address (below), and the
+# Cloudflare Tunnel, whose cloudflared container (in the portfolio stack) reaches
+# this one by name over the tunnel network: http://audiobook-api:8080.
 
 services:
   api:
@@ -24,18 +28,21 @@ services:
       - audiobook-data:/data
     ports:
       # Bound to the Tailscale address only: reachable from the tailnet, not the
-      # LAN or the internet. Public exposure goes through the Cloudflare Tunnel,
-      # later, for the LibriVox demo only.
+      # LAN. Public traffic never uses this port; it arrives through the tunnel.
       # Host port 5043, the same as the API in development. Not 8080: on this
       # server, qBittorrent's web UI (published by gluetun) is likely there.
       - "${BIND_ADDRESS:?set BIND_ADDRESS to the server's Tailscale IP}:${HOST_PORT:-5043}:8080"
     networks:
       - db
+      - tunnel
 
 networks:
   db:
     external: true
     name: ${DB_NETWORK:-audiobook_default}
+  tunnel:
+    external: true
+    name: ${TUNNEL_NETWORK:-portfolio_portfolio-net}
 
 volumes:
   audiobook-data:
