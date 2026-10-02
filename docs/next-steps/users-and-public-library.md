@@ -3,20 +3,62 @@
 Goal: Dean's account is the admin. Other people can sign in and listen to
 public-domain books (LibriVox) as a test, without seeing the private library.
 
-Status: **design, not started.** Written 2026-10-01, right after auth, sync and
-deploy shipped.
+Status: **sections 1, 2 and 6 done and deployed (2026-10-01).** Accounts (section 3)
+are next, starting with admin-created accounts: the build plan is
+[`admin-accounts.md`](admin-accounts.md). Written 2026-10-01, right after auth, sync
+and deploy shipped; updated the same evening.
 
 ## Where things stand
 
-- Auth exists, but it's built for one person. Every signed-in user can do
-  everything, including `POST /api/libraries` and scans, and `GET /api/libraries`
-  shows server paths. **Nothing below is optional before a second account exists.**
-- `User.IsAdmin` exists (the seeded account has it) but nothing reads it.
-- Progress, devices and the conflict rule are already per user, so they need no
-  changes for more users.
-- The real library is public behind the login at `audiobooks.deanburgoyne.dev`.
+- **Admin:** done. The `admin` claim comes from `IsAdmin` through
+  `AudiobookClaimsPrincipalFactory`; the `Admin` policy guards every library
+  endpoint; `/api/auth/me` returns `isAdmin`; `SetAdminAsync` changes the flag and
+  the security stamp together.
+- **Visibility:** done. `Library.IsPublic` (default false) and `Library.Credit`;
+  `VisibleBooks(principal)` on every book, cover, stream and progress endpoint;
+  404 for a book you can't see. `PATCH /api/libraries/{id}` flips a library.
+- **Folder covers:** done (scanner). The largest image wins, folder or embedded.
+- **LibriVox:** live. Four books in `/mnt/media/librivox`, registered as the public
+  library `LibriVox` with the credit "Public domain · LibriVox".
+- **Still one account.** Nobody but Dean can sign in yet, so the non-admin view has
+  only been verified by the integration tests, not on the live site.
+- Progress, devices and the conflict rule were already per user and needed no
+  changes.
 
-## 1. Admin
+## Decisions (settled 2026-10-01)
+
+- **Accounts: both.** Admin-created accounts first (Dean asked to create accounts
+  from the UI), invites after. Admin-created accounts get a temporary passphrase and
+  must change it at first sign-in.
+- **The private library stays Dean's alone.** Admins see everything, everyone else
+  sees public libraries only. No per-user grants table.
+- **Public books carry a credit.** It's a property of the library (`Credit`), shown
+  under the author on the book page.
+
+## What the work turned up
+
+- **Existing sessions keep their old claims.** After the deploy, Dean's cookie
+  (issued by the previous build) was signed in but not admin, and got 403 on
+  `/api/libraries` until he signed in again. That's the stale-claim case
+  `SetAdminAsync` guards against, seen from the other side. Expect it after any
+  deploy that adds claims.
+- **`/mnt/media` is immutable** (`chattr +i` on the drive's top folder). Creating a
+  folder directly under it fails with "Operation not permitted", even with sudo.
+  Lift it, create the folder, put it back:
+  `sudo chattr -i /mnt/media && mkdir /mnt/media/<name> && sudo chattr +i /mnt/media`.
+- **The Internet Archive returns the odd 500** from its storage nodes.
+  `scripts/librivox-fetch.py` retries three times with backoff and skips files it
+  already has, so a rerun resumes.
+- **The hyphen heuristic met real data.** "Through the Looking-glass and What Alice
+  Found There" would have become "glass and What Alice Found There". The series
+  prefix is no longer stripped when the hyphen is followed by a lowercase letter.
+  "Looking-Glass" with a capital G is still mangled; a test pins that limit.
+- **LibriVox tags are clean but thin.** `album`, `artist`, `title` per file; `track`
+  on some books (Sherlock Holmes, `1/24`) but not others (Looking-Glass, so it falls
+  back to natural sort on file names, which is correct here). No narrator tag and
+  no embedded art, so `cover.jpg` is the cover for every one.
+
+## 1. Admin (done)
 
 **Put an `admin` claim in the principal** with a custom
 `UserClaimsPrincipalFactory<User>` that adds it when `IsAdmin` is true, and define an
@@ -35,7 +77,7 @@ all build their principal through that factory, so one place covers every client
 **Admin-only:** `GET`/`POST /api/libraries`, `GET /api/libraries/{id}`, scans, and
 everything under a new `/api/admin` group (users, invites).
 
-## 2. Who sees which books
+## 2. Who sees which books (done)
 
 **`Library.IsPublic`** (bool, default false, so existing libraries stay private).
 
@@ -64,7 +106,9 @@ private library, so it gets the most coverage.
 Per-user grants (a `LibraryAccess` table: this friend can see that library) are
 possible later. Not needed for a public-domain test.
 
-## 3. Getting accounts to people
+## 3. Getting accounts to people (next: A, then B)
+
+Decided: **both**. A is being built first; see [`admin-accounts.md`](admin-accounts.md).
 
 Options, from most closed to most open:
 
@@ -117,7 +161,21 @@ returns 202 with a job ID. An `IHostedService` runs scans one at a time with the
 app's lifetime token, not the request's. `GET /api/admin/scans/{id}` reports
 progress, and the admin page polls it.
 
-## 6. The public-domain library
+## 6. The public-domain library (done)
+
+Live with four solo readings, chosen as a test mix:
+
+| Book | Reader | Files | Why |
+|---|---|---|---|
+| Pride and Prejudice (v3) | Karen Savage | 61 | long novel |
+| The Strange Case of Dr Jekyll and Mr Hyde | Bob Neufeld | 5 | short novel |
+| The Adventures of Sherlock Holmes (v2) | Ruth Golding | 24 | story collection; one `album`, so it stays one book |
+| Through the Looking-Glass (v2) | Adrian Praetzellis | 10 | hyphenated title |
+
+Fetched with `scripts/librivox-fetch.py` (mp3s and the cover only; see
+`docs/deploy.md`). First scan: 4 added, 0 failures.
+
+The design notes below are what this was built from.
 
 **Source: LibriVox**, volunteer recordings of public-domain books, themselves
 dedicated to the public domain. They're hosted on the Internet Archive. Each book
@@ -150,20 +208,20 @@ has a zip of mp3s (64 kbps, about 29 MB per hour) and a separate cover image.
 
 ## Order of work
 
-1. Admin claim, admin-only endpoints, `isAdmin` on `/me`, tests. Safe to ship on its own.
-2. `Library.IsPublic`, `VisibleBooks`, the visibility test matrix.
-3. Folder cover images in the scanner.
-4. LibriVox on the server: download a few books, mount, register as a public library, scan over Tailscale.
-5. Cloudflare rate-limit rule on login.
-6. Invites: table, endpoints, `/invite/:code` page, tests.
-7. Admin page.
-8. Background scanning.
-9. Later: guest "Try it" for the portfolio.
-
-## Open questions for Dean
-
-- Invites (B), admin-created accounts (A), or both?
-- Will anyone besides Dean ever see the private library? If yes, per-user grants
-  come back into scope.
-- Should public books carry a visible "Public domain · LibriVox" credit? LibriVox
-  asks for none, but it's a nice touch, and honest about where the audio comes from.
+1. [x] Admin claim, admin-only endpoints, `isAdmin` on `/me`, tests.
+2. [x] `Library.IsPublic`, `VisibleBooks`, the visibility test matrix.
+3. [x] Folder cover images in the scanner.
+4. [x] LibriVox on the server: four books, mounted, registered as a public library,
+   scanned over Tailscale.
+5. [ ] **Cloudflare rate-limit rule on login.** Still not done. It must exist before
+   a second account does.
+6. [ ] **The admin page: Users (admin-created accounts) and Libraries (public
+   toggle, credit, scan buttons).** Plan: [`admin-accounts.md`](admin-accounts.md).
+   Replaces the browser-console snippets.
+7. [ ] **A command-line tool for server jobs** (`admin reset-password`, `admin scan`,
+   …), run over SSH with `docker exec`. Plan: [`admin-cli.md`](admin-cli.md). Gives a
+   recovery path, which doesn't exist today.
+8. [ ] Invites: table, endpoints, `/invite/:code` page, tests.
+9. [ ] Background scanning. Less urgent once `admin scan` exists.
+10. [ ] First-visit library (web-polish), which matters as soon as a new user signs in.
+11. [ ] Later: guest "Try it" for the portfolio.

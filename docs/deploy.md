@@ -11,7 +11,7 @@ only builds and runs the image.
 | Stack | `/opt/docker/audiobook/` (`docker-compose.yml` and `.env`, copied from `deploy/`) |
 | Container | `audiobook-api`, listening on 8080 inside |
 | Database | the existing `audiobook-db` container, over the `audiobook_default` network |
-| Library | `/mnt/media/audiobooks`, mounted **read-only at the same path** (the `Libraries` row says that path) |
+| Libraries | `/mnt/media/audiobooks` (private, `Audiobooks`) and `/mnt/media/librivox` (public, `LibriVox`), each mounted **read-only at the same path** (the `Libraries` rows say those paths) |
 | Covers and keys | named volume `audiobook-data` at `/data` (`/data/covers`, `/data/keys`) |
 | Private access | `http://100.83.139.4:5043`, Tailscale IP only (not the LAN, not the internet) |
 | Public access | `https://audiobooks.deanburgoyne.dev` via the `homelab` Cloudflare Tunnel |
@@ -72,13 +72,22 @@ From Windows: commit and push. Then on the server (one at a time):
 5. `cd /opt/docker/audiobook && docker compose up -d`
 6. `docker logs audiobook-api --tail 30`
 
+After a deploy that adds or changes claims (the `admin` claim did, on 2026-10-01),
+**sign out and back in**. A cookie keeps the claims it was issued with until its
+next security-stamp check (30 minutes), so an admin's old cookie gets 403 on admin
+endpoints in the meantime.
+
 The API does not migrate on startup. That's deliberate: a migration is a decision,
 and running it by hand keeps a bad one from being applied by a restart.
 
 ## Rescanning
 
-The scan endpoint needs a signed-in user, so run it from the browser's console on
-the site (F12 → Console; Chrome asks you to type `allow pasting` first).
+**Interim.** The console snippets in this file are a stopgap until the admin page's
+Libraries section (`docs/next-steps/admin-accounts.md`) and the `admin` command
+(`docs/next-steps/admin-cli.md`) exist; both will replace them. Don't add more.
+
+The scan endpoint needs a signed-in admin, so for now run it from the browser's
+console on the site (F12 → Console; Chrome asks you to type `allow pasting` first).
 
 **Use the Tailscale address (`http://100.83.139.4:5043`), never the public
 hostname.** Cloudflare gives up on a request after 100 seconds (524), and the scan
@@ -98,8 +107,8 @@ when the scan finishes (minutes: mp3 packet counting reads every file in full).
 
 ## The public-domain library
 
-LibriVox recordings live in `/mnt/media/librivox`, one folder per book, mounted
-read-only like the main library. The library row has `isPublic: true`, so every
+LibriVox recordings live in `/mnt/media/librivox`, one folder per book
+(`Title - Author`), mounted read-only like the main library. The library row has `isPublic: true`, so every
 signed-in user sees these books; the main library stays admin-only.
 
 Fetch books with `scripts/librivox-fetch.py` (mp3s and the cover only; it skips the
@@ -107,6 +116,18 @@ per-track spectrogram PNGs, which would otherwise compete to be the cover):
 
 ```
 python3 scripts/librivox-fetch.py /mnt/media/librivox "IDENTIFIER=Title - Author"
+```
+
+The identifier is the archive.org item (`archive.org/details/<identifier>`). Rerun
+the same command after a failure: finished files are skipped. Then scan the
+`LibriVox` library over Tailscale (the snippet above, with `'LibriVox'`).
+
+**`/mnt/media` itself is immutable** (`chattr +i`, on the drive's top folder). New
+folders *inside* `librivox` or `audiobooks` are fine, but a new top-level folder
+needs the flag lifted and restored:
+
+```
+sudo chattr -i /mnt/media && mkdir /mnt/media/<name> && sudo chattr +i /mnt/media
 ```
 
 Registered once, from the console on the Tailscale address:
@@ -124,6 +145,11 @@ Make a library public or private later with
   `docker run --rm --network portfolio_portfolio-net curlimages/curl -s -o /dev/null -w '%{http_code}\n' http://audiobook-api:8080/` → `200`
 - A client device can't load `http://100.83.139.4:5043`? It isn't on the tailnet.
   `ssh media` uses the LAN, so SSH working proves nothing about Tailscale.
+
+## Locked out?
+
+There is no recovery path yet: a forgotten admin passphrase means editing the
+database. `admin reset-password` (`docs/next-steps/admin-cli.md`) is the fix.
 
 ## Still manual
 

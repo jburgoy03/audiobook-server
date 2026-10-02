@@ -7,6 +7,13 @@ Auth, the sign-in page, synced progress and the jump offer are covered in
 
 ## Done (2026-10-01)
 
+### Admin and credits (evening)
+
+- `auth.ts` keeps `isAdmin` from `/api/auth/me`. Nothing renders it yet; the admin
+  page will.
+- The book page shows the library's credit ("Public domain · LibriVox") under the
+  narrator line.
+
 ### Layout
 
 - **One system.** Frame and gutter tokens (`--frame`, `--gutter`) shared by the
@@ -84,14 +91,13 @@ fonts, `web/public/icons.svg` and `web/src/main.tsx.new` are all gone.
    `ffprobe -show_format` on a file of each and check `album_artist`, `performer`,
    `comment` before extending the precedence in `BookScanner`. Otherwise this waits
    for metadata enrichment (2g).
-3. **Folder cover images. Now the priority item.** Read `cover.jpg`/`folder.jpg`
-   (and other images) from the book directory, largest image wins, ahead of 2g.
-   Needed for LibriVox (covers ship as separate files) and Lord of the Rings (no
-   art anywhere), and it fixes The Name of the Wind's 175x175 embedded art with
-   baked-in black bars. This is a scanner change in `Core`, not a web change.
-4. **First-visit library.** With nothing started (every new user of the public
-   library), there is no featured book. Feature a suggestion or the most recently
-   added book.
+3. ~~**Folder cover images.**~~ **Done 2026-10-01** (scanner, `CoverSelector`). The
+   largest image wins, folder or embedded; LibriVox covers work. To fix Lord of the
+   Rings or The Name of the Wind's 175x175 art, put a `cover.jpg` in the book's
+   folder and rescan (an image newer than the last scan triggers it).
+4. **First-visit library. Now the priority item.** With nothing started (every new
+   user of the public library), there is no featured book. Feature a suggestion or
+   the most recently added book.
 5. **Auto-scroll on tablet and phone.** The chapter list follows playback only on
    desktop. A "Jump to current chapter" control in the stacked layout would cover it.
 6. **Full visual pass at 768 and 375** in the new design. Checked at 1024 so far.

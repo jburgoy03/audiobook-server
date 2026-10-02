@@ -27,7 +27,8 @@ Other scripts: `npm run build` (typecheck and production build to `dist/`),
 
 - `src/auth`: sign-in state (`auth.ts`) and the sign-in page. The cookie is
   HttpOnly, so the client learns whether it's signed in from `GET /api/auth/me`, and
-  from any 401.
+  from any 401. `/me` also says whether the user is an admin; that only decides
+  which controls to show, since the server enforces admin on its own.
 - `src/api`: `fetch` wrappers. A 401 anywhere signs the app out.
 - `src/pages`: the library and book pages.
 - `src/player`: playback and progress. `useBookPlayer` drives one `<audio>` element across a

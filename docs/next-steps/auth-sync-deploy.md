@@ -30,6 +30,8 @@ what comes next is in [`users-and-public-library.md`](users-and-public-library.m
   SPA's `index.html`.
 - **No registration.** `UserSeeder` creates the account at startup from
   `Auth:SeedUser:Username` / `Auth:SeedUser:Password`, only when no user exists.
+  (Since 2026-10-01 that account is the admin, and other users are on the way: see
+  `users-and-public-library.md`.)
 - **Passwords:** 12 characters minimum, no character-class rules. **Lockout:** 5
   failures lock the account for 5 minutes (login answers 429).
 - `User` is now an `IdentityUser<Guid>` on an `IdentityUserContext` (no role
@@ -143,9 +145,10 @@ Also done: `RelativePath` separators are normalised to `/` on every OS
 
 ## Loose ends
 
-- [ ] **Confirm the public hostname** (`audiobooks.deanburgoyne.dev` → `http://audiobook-api:8080`) loads the sign-in page over HTTPS, and that the cookie is `Secure` there.
-- [ ] **Cloudflare rate-limiting rule on `POST /api/auth/login`.** Lockout stops guessing, but anyone who knows the username can keep the account locked. A rate limit stops that at Cloudflare's edge.
+- [x] **Public hostname** (`audiobooks.deanburgoyne.dev` → `http://audiobook-api:8080`) loads the sign-in page over HTTPS (2026-10-01).
+- [x] **Cookie flags on the public hostname:** HttpOnly, Secure, SameSite=Strict (checked in DevTools, 2026-10-01).
+- [ ] **Cloudflare rate-limiting rule on `POST /api/auth/login`.** Lockout stops guessing, but anyone who knows the username can keep the account locked. A rate limit stops that at Cloudflare's edge. **Still open, and now a blocker:** it must exist before a second account does (see `admin-accounts.md`).
 - [ ] **Cloudflare terms:** serving large media through the free plan is restricted. Fine at one listener; revisit before inviting others (see the users doc).
 - [ ] **CI/CD:** the image is built on the server by hand. GitHub Actions → GHCR → deploy over Tailscale is still to do.
-- [ ] Lord of the Rings has no cover anywhere (nothing embedded, no image in the folder). Folder images (web-polish) or enrichment (2g).
+- [ ] Lord of the Rings has no cover anywhere. The scanner now reads folder images, so a `cover.jpg` in its folder (then a rescan) fixes it.
 - [ ] Data-protection keys are stored unencrypted on the volume (startup warning). Acceptable on a single server: anyone who can read the volume owns the box.
