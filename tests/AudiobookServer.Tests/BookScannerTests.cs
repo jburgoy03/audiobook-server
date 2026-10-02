@@ -167,6 +167,49 @@ public class BookScannerTests
         Assert.Equal(expected, result.Author);
     }
 
+    [Theory]
+    [InlineData("The Name of the Wind by Patrick Rothfuss", "The Name of the Wind")]
+    [InlineData("A Wild Sheep Chase - Haruki Murakami", "A Wild Sheep Chase")]
+    [InlineData("11.22.63 - Stephen King", "11.22.63")]
+    [InlineData("Just A Title", "Just A Title")]
+    public async Task Untagged_title_is_the_title_half_of_the_directory_name(string dirName, string expected)
+    {
+        var file = File($"/library/{dirName}/a.mp3", 10);
+
+        var result = await ScanOneAsync(ScannerFor(file), $"/library/{dirName}", file.Path);
+
+        Assert.Equal(expected, result.Title);
+    }
+
+    [Fact]
+    public async Task Known_limit_author_first_directory_names_come_out_backwards()
+    {
+        // From the name alone, "Author - Title" is indistinguishable from "Title - Author".
+        // The library's folders follow Title - Author; this pins what happens otherwise.
+        var file = File("/library/Haruki Murakami - After Dark/a.mp3", 10);
+
+        var result = await ScanOneAsync(ScannerFor(file), "/library/Haruki Murakami - After Dark", file.Path);
+
+        Assert.Equal("Haruki Murakami", result.Title);
+        Assert.Equal("After Dark", result.Author);
+    }
+
+    [Fact]
+    public async Task A_disc_set_plays_disc_by_disc_when_every_disc_restarts_its_numbering()
+    {
+        // Every disc has a 01 and a 02, with track tags that repeat per disc, so the
+        // tags can't order the set and file names alone would interleave the discs.
+        var files = new[] { "disc 10/02.mp3", "disc 2/01.mp3", "disc 1/02.mp3", "disc 10/01.mp3", "disc 1/01.mp3", "disc 2/02.mp3" }
+            .Select(rel => File($"/library/Book/{rel}", 10, track: Path.GetFileNameWithoutExtension(rel)))
+            .ToArray();
+
+        var result = await ScanOneAsync(ScannerFor(files), "/library/Book", files.Select(f => f.Path).ToArray());
+
+        Assert.Equal(
+            ["Book/disc 1/01.mp3", "Book/disc 1/02.mp3", "Book/disc 2/01.mp3", "Book/disc 2/02.mp3", "Book/disc 10/01.mp3", "Book/disc 10/02.mp3"],
+            result.Files.Select(f => f.RelativePath));
+    }
+
     // ---- collection splitting ----
 
     [Fact]

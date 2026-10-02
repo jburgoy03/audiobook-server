@@ -67,7 +67,7 @@ public class LibraryScanService(
                                 (b.RelativePath == directoryKey || b.RelativePath.StartsWith(splitPrefix)))
                     .ToListAsync(ct);
 
-                if (!force && existing.Count > 0 && !NeedsRescan(existing, candidate))
+                if (!force && existing.Count > 0 && !NeedsRescan(existing, candidate, library.RootPath))
                 {
                     unchanged += existing.Count;
                     continue;
@@ -200,7 +200,7 @@ public class LibraryScanService(
     /// keeps the original timestamp (unzip, cp -p) or a deleted image goes unnoticed;
     /// those need a forced rescan.
     /// </summary>
-    private static bool NeedsRescan(List<Book> existing, BookCandidate candidate)
+    private static bool NeedsRescan(List<Book> existing, BookCandidate candidate, string libraryRoot)
     {
         var lastScanned = existing.Min(b => b.LastScannedAt);
         if (lastScanned is null)
@@ -221,10 +221,12 @@ public class LibraryScanService(
         if (stored.Count != candidate.FilePaths.Count)
             return true;
 
+        // By path within the library, not file name: every disc of a disc set has its
+        // own 01.mp3.
         foreach (var path in candidate.FilePaths)
         {
-            var name = Path.GetFileName(path);
-            var match = stored.FirstOrDefault(f => Path.GetFileName(f.RelativePath) == name);
+            var relative = LibraryPaths.Relative(libraryRoot, path);
+            var match = stored.FirstOrDefault(f => f.RelativePath == relative);
 
             if (match is null)
                 return true;

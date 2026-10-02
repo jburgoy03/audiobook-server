@@ -53,7 +53,7 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         var directoryKey = LibraryPaths.Relative(libraryRoot, candidate.DirectoryPath);
 
         return GroupIntoBooks(probed)
-            .Select(group => BuildBook(group, directoryName, directoryKey, libraryRoot, candidate.FolderImages))
+            .Select(group => BuildBook(group, candidate.DirectoryPath, directoryName, directoryKey, libraryRoot, candidate.FolderImages))
             .ToList();
     }
 
@@ -84,10 +84,10 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
     }
 
     private static ScannedBook BuildBook(
-        BookGroup group, string directoryName, string directoryKey, string libraryRoot,
+        BookGroup group, string directoryPath, string directoryName, string directoryKey, string libraryRoot,
         IReadOnlyList<FolderImage> folderImages)
     {
-        var ordered = OrderFiles(group.Files);
+        var ordered = OrderFiles(group.Files, directoryPath);
 
         var files = new List<AudioFile>();
         var chapters = new List<Chapter>();
@@ -152,11 +152,13 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         var embedded = coverFile is null ? null : new EmbeddedCover(coverFile.Path, coverFile.Cover!);
         var cover = CoverSelector.Choose(folderImages, embedded, folderIsCollection: group.Album is not null);
 
+        var fromName = ParseDirectoryName(directoryName);
+
         return new ScannedBook(
             // Split books need distinct keys, since they share a directory.
             Key: group.Album is null ? directoryKey : $"{directoryKey}#{group.Album}",
-            Title: CleanTitle(album) ?? directoryName,
-            Author: first.Tag("artist") ?? AuthorFromDirectoryName(directoryName),
+            Title: CleanTitle(album) ?? fromName.Title ?? directoryName,
+            Author: first.Tag("artist") ?? fromName.Author,
             Narrator: first.Tag("composer") ?? first.Tag("narrator"),
             DurationSeconds: offset,
             Files: files,
@@ -165,10 +167,12 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
     }
 
     /// <summary>
-    /// Track tags win when present, since they're authoritative. Natural sort on
-    /// filename is the fallback, and it's what keeps unpadded numbering correct.
+    /// Track tags win when present, since they're authoritative. Natural sort on the
+    /// path within the book is the fallback: it keeps unpadded numbering correct, and
+    /// orders a disc set by disc ("disc 2/01.mp3" before "disc 10/01.mp3"), where
+    /// every disc restarts its track numbers and file names.
     /// </summary>
-    private static List<ProbedFile> OrderFiles(List<ProbedFile> probed)
+    private static List<ProbedFile> OrderFiles(List<ProbedFile> probed, string directoryPath)
     {
         var withTracks = probed
             .Select(p => (File: p, Track: ParseTrack(p.Tag("track"))))
@@ -181,7 +185,7 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         }
 
         return probed
-            .OrderBy(p => Path.GetFileName(p.Path), NaturalComparer.Instance)
+            .OrderBy(p => Path.GetRelativePath(directoryPath, p.Path).Replace('\\', '/'), NaturalComparer.Instance)
             .ToList();
     }
 
@@ -210,16 +214,21 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         return match.Success ? match.Groups["title"].Value.Trim() : album.Trim();
     }
 
-    /// <summary>Last resort when tags carry no artist: "Title by Author" or "Title - Author".</summary>
-    private static string? AuthorFromDirectoryName(string directoryName)
+    /// <summary>
+    /// Last resort when tags are missing: "Title by Author" or "Title - Author". The
+    /// order is a convention, not something the name can prove: "Author - Title" reads
+    /// exactly the same, and comes out backwards. Folders are named Title - Author in
+    /// this library for that reason (see docs/deploy.md).
+    /// </summary>
+    private static (string? Title, string? Author) ParseDirectoryName(string directoryName)
     {
         var by = ByPattern().Match(directoryName);
-        if (by.Success) return by.Groups["author"].Value.Trim();
+        if (by.Success) return (by.Groups["title"].Value.Trim(), by.Groups["author"].Value.Trim());
 
         var dash = DashPattern().Match(directoryName);
-        if (dash.Success) return dash.Groups["author"].Value.Trim();
+        if (dash.Success) return (dash.Groups["title"].Value.Trim(), dash.Groups["author"].Value.Trim());
 
-        return null;
+        return (null, null);
     }
 
     private static string FallbackChapterTitle(ProbedFile file, int index) =>

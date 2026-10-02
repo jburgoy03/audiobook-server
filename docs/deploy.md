@@ -141,6 +141,66 @@ docker exec -it audiobook-api ./AudiobookServer.Api admin scan Audiobooks --forc
 covers); a plain scan skips files whose mtime hasn't changed. mp3 packet counting
 reads every file in full, so a forced scan of the big library takes minutes.
 
+## Adding books
+
+Copy a book's folder into `/mnt/media/audiobooks` (private) or `/mnt/media/librivox`
+(public), then run a **plain** scan of that library (Admin page, or `admin scan
+<library>`). A plain scan skips unchanged files, so only the new book is probed.
+Nothing watches the folders: a book appears only after a scan.
+
+What the scanner expects:
+
+- **One book per folder.** A folder whose subfolders are *all* disc folders
+  (`cd 01 of 11`, `disc 3`, `CD1`) is one book, played disc by disc. A mix of disc
+  folders and anything else is not merged; "Part 1" folders are separate books.
+- **Name folders `Title - Author`** (or `Title by Author`). Tags win when present
+  (`album` → title, `artist` → author), but many downloads have none, and then the
+  folder name is all there is. `Author - Title` reads the same to the parser and comes
+  out backwards. To flip a batch of `Author - Title` folders:
+  `for d in *' - '*; do mv -n -- "$d" "${d#* - } - ${d%% - *}"; done` (check the list first).
+- **A `cover.jpg`** in the folder wins whenever it's larger than the embedded art.
+- Files in one folder with different `album` tags are taken to be a collection and
+  split into one book per album.
+
+Check before scanning (album/artist per folder, run inside the container):
+
+```
+docker exec audiobook-api sh -c 'for d in /mnt/media/audiobooks/*/; do echo "== $d"; find "$d" -type f \( -iname "*.mp3" -o -iname "*.m4b" -o -iname "*.m4a" \) | while read -r f; do ffprobe -v quiet -show_entries format_tags=album,artist -of csv=p=0 "$f" </dev/null; done | sort | uniq -c | sort -rn | head -6; done'
+```
+
+## The public-domain library
+
+LibriVox recordings live in `/mnt/media/librivox`, one folder per book
+(`Title - Author`), mounted read-only like the main library. The library row has
+`isPublic: true`, so every signed-in user sees these books; the main library stays
+admin-only.
+
+Fetch books with `scripts/librivox-fetch.py` (mp3s and the cover only; it skips the
+per-track spectrogram PNGs, which would otherwise compete to be the cover):
+
+```
+python3 scripts/librivox-fetch.py /mnt/media/librivox "IDENTIFIER=Title - Author"
+```
+
+The identifier is the archive.org item (`archive.org/details/<identifier>`). Prefer
+solo readings: quality varies far more between multi-reader recordings. Rerun the same
+command after a failure: finished files are skipped. Then scan it:
+`docker exec -it audiobook-api ./AudiobookServer.Api admin scan LibriVox`, or
+**Scan** on the Admin page. To drop a book, delete its folder and scan again: the book
+and everyone's position in it are removed.
+
+**`/mnt/media` itself is immutable** (`chattr +i`, on the drive's top folder). New
+folders *inside* `librivox` or `audiobooks` are fine, but a new top-level folder
+needs the flag lifted and restored:
+
+```
+sudo chattr -i /mnt/media && mkdir /mnt/media/<name> && sudo chattr +i /mnt/media
+```
+
+It's registered as `LibriVox`, public, with the credit "Public domain · LibriVox".
+A new folder of this kind is added from the Admin page (**Add library**); it must
+also be mounted in `deploy/docker-compose.yml`, at the same path, first.
+
 ## Checks
 
 - Reachable on the tunnel network, as `cloudflared` sees it:
