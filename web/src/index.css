@@ -268,15 +268,57 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
   grid-template-columns: subgrid;
 }
 
+/* The text beside the cover links to the book's page. */
 .continue-item {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: subgrid;
-  align-items: start;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
   text-decoration: none;
 }
 
 .continue-text { display: grid; gap: 0.1rem; }
+
+/* The cover is the play button; the play disc on it is a hint, shown on hover
+   and keyboard focus, and always on touch screens (no hover to reveal it). */
+.continue-cover {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.continue-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--release) var(--ease-out);
+}
+.continue-play-disc {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  padding-left: 2px; /* optical centre: the triangle's weight sits left */
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--page);
+}
+.continue-cover:focus-visible .continue-play,
+.continue-cover[aria-busy] .continue-play { opacity: 1; }
+@media (hover: hover) {
+  .continue-cover:hover .continue-play { opacity: 0.92; }
+}
+@media (hover: none) {
+  .continue-play { opacity: 0.85; }
+  .continue-play-disc { width: 2.5rem; height: 2.5rem; }
+}
 .continue-more { margin-top: var(--row-gap); }
 .continue-left { margin-top: 0.35rem; color: var(--muted); font-variant-numeric: lining-nums tabular-nums; }
 
@@ -419,6 +461,11 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
     display: flex;
     flex-direction: column;
     max-height: max(36rem, calc(100dvh - 3rem));
+  }
+  /* The now-playing bar shows on the book page too: keep the chapter list's
+     last rows above it. */
+  body:has(.now-bar) .book-main {
+    max-height: max(36rem, calc(100dvh - 3rem - 5rem - env(safe-area-inset-bottom)));
   }
   .book-main .chapters {
     display: flex;
@@ -949,14 +996,14 @@ button { -webkit-user-select: none; user-select: none; }
 
 /* Covers settle on press. */
 .book-tile .cover,
-.continue-item .cover,
+.continue-cover .cover,
 .feature-cover .cover {
   transition:
     transform 220ms var(--ease-out),
     opacity 220ms var(--ease-out);
 }
 .book-tile:active .cover,
-.continue-item:active .cover,
+.continue-cover:active .cover,
 .feature-cover:active .cover {
   transform: scale(0.97);
   transition-duration: var(--press);
@@ -985,7 +1032,7 @@ button { -webkit-user-select: none; user-select: none; }
 
   /* Covers brighten a touch under the pointer; titles underline. */
   .book-tile:hover .cover,
-  .continue-item:hover .cover,
+  .continue-cover:hover .cover,
   .feature-cover:hover .cover { opacity: 0.88; }
   .book-tile:hover .book-title,
   .continue-item:hover .book-title,
@@ -1008,11 +1055,11 @@ button { -webkit-user-select: none; user-select: none; }
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; }
   /* Keep the tints (they aren't motion); drop movement, morphing and scaling. */
-  .control, .resume, .book-tile .cover, .continue-item .cover, .feature-cover .cover,
+  .control, .resume, .book-tile .cover, .continue-cover .cover, .feature-cover .cover,
   .timeline-track, .pp-half, .skip-arc,
   .speed select::picker(select), .speed select::picker-icon { transition: none; }
   .control:active, .resume:active, .control-play:active,
-  .book-tile:active .cover, .continue-item:active .cover, .feature-cover:active .cover,
+  .book-tile:active .cover, .continue-cover:active .cover, .feature-cover:active .cover,
   .control:active .skip-arc { transform: none !important; }
   .level-meter.active rect { animation: none; }
 }

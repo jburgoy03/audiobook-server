@@ -7,8 +7,9 @@ import { PlayPauseIcon, SkipIcon } from './Icons'
 
 /**
  * A slim bar along the bottom while a book is active, so playback started on
- * one page can be paused from any other. Hidden on the active book's own page,
- * where the full player already is.
+ * one page can be paused from any other. Shown on the active book's own page
+ * too (Dean's call, 2026-10-02: the bar is the constant "now playing" signal),
+ * minus the jump offer, which that page's player already shows.
  *
  * Same alignment rule as the player's transport row: the book on the frame's
  * left edge, controls centred on the frame, time remaining on the right edge.
@@ -20,7 +21,8 @@ export function NowPlayingBar() {
 
   const { book, player: p } = now
   const href = `/books/${book.id}`
-  if (pathname === href) return null
+  const onOwnPage = pathname === href
+  const offer = p.offer && !onOwnPage
 
   const chapter = book.chapters[p.chapterIndex]
   const fraction = p.total > 0 ? Math.min(p.position / p.total, 1) : 0
@@ -28,14 +30,14 @@ export function NowPlayingBar() {
   return (
     <>
       {/* Keeps the end of the page from being hidden under the bar. */}
-      <div className="now-bar-spacer" data-offer={p.offer ? '' : undefined} aria-hidden="true" />
+      <div className="now-bar-spacer" data-offer={offer ? '' : undefined} aria-hidden="true" />
       <section className="now-bar" aria-label="Now playing">
         <div className="now-bar-progress" aria-hidden="true">
           <span style={{ width: `${fraction * 100}%` }} />
         </div>
         {/* Resume from the library starts the book here, off its own page, so
             the offer to jump has to be reachable here too. */}
-        {p.offer && (
+        {offer && (
           <div className="now-bar-offer frame">
             <JumpPrompt player={p} />
           </div>

@@ -5,6 +5,20 @@ Small, independent fixes to the web client in `web/`. Status as of 2026-10-02 (a
 Auth, the sign-in page, synced progress and the jump offer are covered in
 [`auth-sync-deploy.md`](auth-sync-deploy.md), not here.
 
+## Done (2026-10-02, afternoon)
+
+- **Featured timeline seeks.** The library's featured bar is the player's seek bar:
+  drag shows the position, seek on release. Active book: live seek. Inactive: becomes
+  active at that point, paused (the book page's idle rule).
+- **Bottom row plays in place.** Each compact item's whole cover is a play button
+  (`ContinueItem`); the title links to the book. The play disc is a hint on hover
+  and keyboard focus, always visible on touch. Playing moves the book to featured.
+- **Now-playing bar on the book's own page too** (Dean's call), without the jump
+  offer there (the player has it). The sticky desktop column subtracts the bar's
+  height so the chapter list's last rows stay above it.
+- Kept: the 60-second "started" threshold for the compact row. A briefly sampled
+  book stays out of it until it's played past a minute (Dean is fine with that).
+
 ## Done (2026-10-02)
 
 - **Admin page** (`/admin`): Listeners and Libraries. See `admin-accounts.md`.

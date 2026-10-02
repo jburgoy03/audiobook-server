@@ -7,7 +7,7 @@ import { PlayPauseIcon } from '../components/Icons'
 import { ChapterTimeline } from '../player/ChapterTimeline'
 import { useActivate, useActiveBookId, useLivePlayer } from '../player/nowPlaying'
 import { progressStore, useProgressEntries } from '../player/progress'
-import { chapterIndexAt } from '../player/timeline'
+import { chapterIndexAt, clampPosition } from '../player/timeline'
 
 /** "4h 12m", "38m". Rounded, because this is a glance, not a clock. */
 function formatLength(seconds: number) {
@@ -58,6 +58,10 @@ function progressFor(book: BookSummary): Progress | null {
  * `savedPosition` is only used while the book isn't active; an active book
  * always shows the player's own position, so nothing here waits for a save.
  *
+ * The bar is a seek bar, as in the player: dragging shows the drag position and
+ * seeks once, on release. On the active book that's a live seek; otherwise it
+ * makes the book active at that point, paused (the book page's idle rule).
+ *
  * `fresh`: a book nobody has started (the first-visit pick). Same layout, but the
  * button says Play and the line under the bar gives its length, not 0% listened.
  * Once it plays it's the active book, and this is an ordinary feature again.
@@ -87,7 +91,19 @@ function FeaturedBook({
     return () => controller.abort()
   }, [book.id])
 
-  const position = live ? live.position : savedPosition
+  // While dragging, everything shows the drag position.
+  const [scrub, setScrub] = useState<number | null>(null)
+  const position = scrub ?? (live ? live.position : savedPosition)
+  // Seeking an inactive book needs its file list, to start in the right file.
+  const seekable = live !== null || detail !== null
+
+  const commitScrub = () => {
+    if (scrub === null) return
+    const target = scrub
+    setScrub(null)
+    if (live) live.seek(target)
+    else if (detail) activate(detail, { startAt: clampPosition(detail.files, target), autoplay: false })
+  }
   const fraction = book.durationSeconds > 0 ? position / book.durationSeconds : 0
   const chapters = detail?.chapters ?? []
   const chapterIndex = chapterIndexAt(chapters, position)
@@ -146,7 +162,13 @@ function FeaturedBook({
             ' '
           )}
         </p>
-        <ChapterTimeline chapters={chapters} total={book.durationSeconds} value={position} />
+        <ChapterTimeline
+          chapters={chapters}
+          total={book.durationSeconds}
+          value={position}
+          onScrub={seekable ? setScrub : undefined}
+          onCommit={seekable ? commitScrub : undefined}
+        />
         <p className="times">
           {unstarted ? (
             <>
@@ -185,6 +207,56 @@ function LiveCover({ book, savedFraction }: { book: BookSummary; savedFraction?:
   const fraction =
     live && book.durationSeconds > 0 ? live.position / book.durationSeconds : savedFraction
   return <Cover bookId={book.id} title={book.title} hasCover={book.hasCover} progress={fraction} />
+}
+
+/**
+ * One of the books after the featured one. The whole cover is a play button that
+ * starts the book right here; the title and author link to the book's page.
+ * Playing makes it the active book, which is always featured, so it moves up to
+ * the top. The play icon on the cover is only a hint (hover, or always on touch).
+ */
+function ContinueItem({ book, progress }: { book: BookSummary; progress: Progress }) {
+  const activate = useActivate()
+  const [starting, setStarting] = useState(false)
+
+  const play = async () => {
+    setStarting(true)
+    try {
+      activate(await api.book(book.id), { autoplay: true })
+    } catch {
+      // Leave it; the book page will show the real error.
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  return (
+    <li>
+      <button
+        type="button"
+        className="continue-cover"
+        aria-label={`Play ${book.title}`}
+        aria-busy={starting || undefined}
+        onClick={() => {
+          if (!starting) void play()
+        }}
+      >
+        <Cover bookId={book.id} title={book.title} hasCover={book.hasCover} progress={progress.fraction} />
+        <span className="continue-play" aria-hidden="true">
+          <span className="continue-play-disc">
+            <PlayPauseIcon playing={false} size={22} />
+          </span>
+        </span>
+      </button>
+      <Link to={`/books/${book.id}`} className="continue-item">
+        <span className="continue-text">
+          <span className="book-title">{book.title}</span>
+          <span className="muted">{book.author ?? 'Unknown author'}</span>
+          <span className="continue-left">{formatLength(book.durationSeconds - progress.position)} left</span>
+        </span>
+      </Link>
+    </li>
+  )
 }
 
 export function LibraryPage() {
@@ -293,23 +365,9 @@ export function LibraryPage() {
 
           {others.length > 0 && (
             <ul className="shelf-list continue-list continue-more grid">
-              {others.map((b) => {
-                const p = progress.get(b.id)!
-                return (
-                  <li key={b.id}>
-                    <Link to={`/books/${b.id}`} className="continue-item">
-                      <Cover bookId={b.id} title={b.title} hasCover={b.hasCover} progress={p.fraction} />
-                      <span className="continue-text">
-                        <span className="book-title">{b.title}</span>
-                        <span className="muted">{b.author ?? 'Unknown author'}</span>
-                        <span className="continue-left">
-                          {formatLength(b.durationSeconds - p.position)} left
-                        </span>
-                      </span>
-                    </Link>
-                  </li>
-                )
-              })}
+              {others.map((b) => (
+                <ContinueItem key={b.id} book={b} progress={progress.get(b.id)!} />
+              ))}
             </ul>
           )}
         </section>
