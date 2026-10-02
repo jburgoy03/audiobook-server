@@ -9,7 +9,7 @@ namespace AudiobookServer.Tests.Integration;
 /// <summary>
 /// Accounts made by the admin: the temporary passphrase, the must-change gate the
 /// server enforces, disabling, and resets. Each test makes its own users, so they
-/// can't disturb the fixture's two.
+/// can't disturb the fixture's accounts.
 /// </summary>
 [Collection(ApiCollection.Name)]
 [Trait("Category", "Integration")]

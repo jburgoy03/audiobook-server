@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace AudiobookServer.Api.Auth;
 
 /// <summary>
-/// Which books a user may see: an admin sees every library, everyone else sees public
-/// libraries only.
+/// Which books a user may see: an admin sees every library; everyone else sees public
+/// libraries plus any library they've been granted (LibraryGrant).
 ///
 /// This is the one place that rule lives. Every endpoint that touches a book (list,
 /// detail, cover, stream, all three progress endpoints) starts from VisibleBooks
@@ -26,6 +26,13 @@ public static class Visibility
     public static IQueryable<Book> VisibleBooks(this AudiobookDbContext db, ClaimsPrincipal principal)
     {
         var books = db.Books.AsNoTracking();
-        return principal.IsAdmin() ? books : books.Where(b => b.Library!.IsPublic);
+        if (principal.IsAdmin()) return books;
+
+        // Grants are read here, per request, rather than carried in a claim: a revoke
+        // takes effect on the next request instead of at the next stamp check.
+        var userId = principal.GetUserId();
+        return books.Where(b =>
+            b.Library!.IsPublic
+            || db.LibraryGrants.Any(g => g.UserId == userId && g.LibraryId == b.LibraryId));
     }
 }

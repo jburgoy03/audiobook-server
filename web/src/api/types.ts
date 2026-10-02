@@ -22,6 +22,8 @@ export interface BookSummary {
   hasCover: boolean
   files: number
   chapters: number
+  /** When a scan first found it. Picks the book a new listener sees featured. */
+  addedAt: string
 }
 
 /** A file's place on the book's single timeline. Addressed by sequence, never by ID. */
@@ -76,6 +78,8 @@ export interface AdminUser {
   mustChangePassword: boolean
   /** Latest playback report from any of their devices; null if they've never played. */
   lastSeenAt: string | null
+  /** Libraries granted beyond the public ones. Admins see everything regardless. */
+  libraryIds: string[]
 }
 
 /** Returned once, by create and reset. Only the hash is stored on the server. */

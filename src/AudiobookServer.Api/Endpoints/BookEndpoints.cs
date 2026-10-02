@@ -25,7 +25,8 @@ public static class BookEndpoints
                     b.DurationSeconds,
                     HasCover = b.CoverPath != null,
                     Files = b.Files.Count,
-                    Chapters = b.Chapters.Count
+                    Chapters = b.Chapters.Count,
+                    b.AddedAt
                 })
                 .ToListAsync(ct));
 

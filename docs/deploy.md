@@ -119,8 +119,14 @@ Day to day, from the **Admin** page (link in the masthead, admins only):
 - **Disable / Enable:** a disabled account can't sign in, and open sessions end within
   five minutes (refresh tokens at once; an Android access token within its hour).
 
-The same rules apply from the `admin` command. Every listener sees the public
-libraries only; the private library is never shared.
+- **Libraries:** which private libraries a listener sees, as a checklist (public
+  ones are ticked for everyone). Applies on their next request; nobody is signed
+  out. Removing access hides their positions on those books rather than deleting
+  them, so giving it back restores them. Admins see every library regardless.
+
+The same rules apply from the `admin` command (except library access, which is on
+the Admin page only for now). Every listener sees the public libraries, plus any
+private library granted to them on the Admin page.
 
 ## Libraries and scanning
 
@@ -181,7 +187,7 @@ docker exec audiobook-api sh -c 'for d in /mnt/media/audiobooks/*/; do echo "== 
 LibriVox recordings live in `/mnt/media/librivox`, one folder per book
 (`Title - Author`), mounted read-only like the main library. The library row has
 `isPublic: true`, so every signed-in user sees these books; the main library stays
-admin-only.
+admin-only unless granted to a listener (Admin → Listeners → Libraries).
 
 Fetch books with `scripts/librivox-fetch.py` (mp3s and the cover only; it skips the
 per-track spectrogram PNGs, which would otherwise compete to be the cover):

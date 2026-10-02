@@ -11,10 +11,11 @@ namespace AudiobookServer.Tests.Integration;
 /// The regression that would leak the private library. Every book endpoint, as each
 /// kind of user, against a book in each kind of library:
 ///
-///   {admin, user} × {public, private} × {list, detail, cover, stream GET, stream HEAD,
-///                                        progress GET, progress list, progress POST}
+///   {admin, user, granted} × {public, private} × {list, detail, cover, stream GET,
+///                       stream HEAD, progress GET, progress list, progress POST}
 ///
-/// The rule: an admin sees everything, a user sees public libraries only, and a book
+/// The rule: an admin sees everything, a user sees public libraries plus the ones
+/// they've been granted ("granted" holds a grant on the private library), and a book
 /// you can't see is a 404 (or simply absent from a list), never a 403.
 ///
 /// A new book endpoint belongs in this matrix. If it isn't here, nothing checks that
@@ -34,7 +35,7 @@ public class VisibilityTests(ApiFixture api)
         get
         {
             var data = new TheoryData<string, string, string>();
-            foreach (var user in new[] { "admin", "user" })
+            foreach (var user in new[] { "admin", "user", "granted" })
                 foreach (var library in new[] { "public", "private" })
                     foreach (var endpoint in Endpoints)
                         data.Add(user, library, endpoint);
@@ -44,13 +45,16 @@ public class VisibilityTests(ApiFixture api)
 
     [Theory]
     [MemberData(nameof(Matrix))]
-    public async Task Admins_see_everything_users_see_public_only(string user, string library, string endpoint)
+    public async Task Admins_see_everything_users_see_public_and_granted(string user, string library, string endpoint)
     {
-        var (username, password) = user == "admin"
-            ? (ApiFixture.Username, ApiFixture.Password)
-            : (ApiFixture.VisitorUsername, ApiFixture.VisitorPassword);
+        var (username, password) = user switch
+        {
+            "admin" => (ApiFixture.Username, ApiFixture.Password),
+            "granted" => (ApiFixture.GrantedUsername, ApiFixture.GrantedPassword),
+            _ => (ApiFixture.VisitorUsername, ApiFixture.VisitorPassword),
+        };
         var bookId = library == "public" ? api.PublicBookId : api.PrivateBookId;
-        var visible = user == "admin" || library == "public";
+        var visible = user is "admin" or "granted" || library == "public";
 
         using var client = await api.CookieClientAsync(username, password);
 

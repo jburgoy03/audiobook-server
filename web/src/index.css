@@ -1068,6 +1068,21 @@ button { -webkit-user-select: none; user-select: none; }
 }
 .admin-confirm p { margin: 0 0 0.6rem; }
 
+/* Library access: one checkbox per library, name then a quiet count. */
+.access-list { margin: 0 0 0.6rem; padding: 0; list-style: none; }
+.access-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.6rem;
+  padding: 0.3rem 0;
+  cursor: pointer;
+}
+.access-option input { width: 1.05rem; height: 1.05rem; margin: 0; accent-color: var(--ink); align-self: center; }
+.access-option:has(input:disabled) { cursor: default; }
+.access-option .muted { font-size: 0.9375rem; font-style: italic; }
+.admin-confirm p.access-note { font-size: 0.9375rem; font-style: italic; }
+
 /* The temporary passphrase: large, spaced for reading aloud, selectable in one go. */
 .grant { margin: 0 0 1.5rem; }
 .grant-lead,

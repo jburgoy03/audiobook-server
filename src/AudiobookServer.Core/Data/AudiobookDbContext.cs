@@ -18,6 +18,7 @@ public class AudiobookDbContext(DbContextOptions<AudiobookDbContext> options)
     public DbSet<Chapter> Chapters => Set<Chapter>();
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<PlaybackPosition> PlaybackPositions => Set<PlaybackPosition>();
+    public DbSet<LibraryGrant> LibraryGrants => Set<LibraryGrant>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -88,6 +89,23 @@ public class AudiobookDbContext(DbContextOptions<AudiobookDbContext> options)
         });
 
         b.Entity<User>(e => e.ToTable("Users"));
+
+        b.Entity<LibraryGrant>(e =>
+        {
+            // One row per account per library; the key doubles as the lookup index
+            // VisibleBooks uses (UserId first).
+            e.HasKey(x => new { x.UserId, x.LibraryId });
+
+            e.HasOne(x => x.User)
+             .WithMany()
+             .HasForeignKey(x => x.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Library)
+             .WithMany()
+             .HasForeignKey(x => x.LibraryId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
 
         b.Entity<Device>(e =>
         {

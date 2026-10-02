@@ -9,11 +9,35 @@ import { useAuth } from '../auth/auth'
  * goes to an endpoint that enforces the Admin policy itself.
  */
 export function AdminPage() {
+  // Both sections need the libraries (listeners for their grants), so the list
+  // lives here: making a library public updates the grants panel too.
+  const [libraries, setLibraries] = useState<Library[] | null>(null)
+  const [librariesError, setLibrariesError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    api
+      .libraries(controller.signal)
+      .then(setLibraries)
+      .catch((e: unknown) => {
+        if (!controller.signal.aborted) setLibrariesError(describe(e))
+      })
+    return () => controller.abort()
+  }, [])
+
+  const refreshLibraries = async () => {
+    try {
+      setLibraries(await api.libraries())
+    } catch (e) {
+      setLibrariesError(describe(e))
+    }
+  }
+
   return (
     <div className="admin">
       <h1 className="admin-title">Admin</h1>
-      <UsersSection />
-      <LibrariesSection />
+      <UsersSection libraries={libraries ?? []} />
+      <LibrariesSection libraries={libraries} error={librariesError} refresh={refreshLibraries} />
     </div>
   )
 }
@@ -21,9 +45,9 @@ export function AdminPage() {
 // ---------- Listeners ----------
 
 type Grant = TemporaryPassword & { kind: 'created' | 'reset' }
-type Pending = { id: string; action: 'reset' | 'disable' }
+type Pending = { id: string; action: 'reset' | 'disable' | 'libraries' }
 
-function UsersSection() {
+function UsersSection({ libraries }: { libraries: Library[] }) {
   const auth = useAuth()
   const self = auth.status === 'signedIn' ? auth.username : null
 
@@ -71,6 +95,8 @@ function UsersSection() {
       setAdding(false)
     }
   }
+
+  const hasPrivate = libraries.some((l) => !l.isPublic)
 
   const act = async (user: AdminUser, action: 'reset' | 'disable' | 'enable') => {
     setConfirming(null)
@@ -130,7 +156,7 @@ function UsersSection() {
               <li key={user.id} className="admin-row">
                 <div className="admin-row-text">
                   <span className="admin-row-name">{user.username}</span>
-                  <span className="admin-row-meta muted">{describeUser(user, isSelf)}</span>
+                  <span className="admin-row-meta muted">{describeUser(user, isSelf, libraries)}</span>
                 </div>
 
                 {/* Not for your own account: resetting it would sign you out
@@ -138,6 +164,20 @@ function UsersSection() {
                     is refused by the server. The admin command covers both. */}
                 {!isSelf && (
                   <div className="admin-row-actions">
+                    {/* An admin already sees every library. */}
+                    {!user.isAdmin && hasPrivate && (
+                      <button
+                        type="button"
+                        className="pill"
+                        disabled={busy}
+                        aria-expanded={pending === 'libraries'}
+                        onClick={() =>
+                          setConfirming(pending === 'libraries' ? null : { id: user.id, action: 'libraries' })
+                        }
+                      >
+                        Libraries
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="pill"
@@ -163,7 +203,19 @@ function UsersSection() {
                   </div>
                 )}
 
-                {pending && (
+                {pending === 'libraries' && (
+                  <LibraryAccessPanel
+                    user={user}
+                    libraries={libraries}
+                    onCancel={() => setConfirming(null)}
+                    onSaved={async () => {
+                      setConfirming(null)
+                      await refresh()
+                    }}
+                  />
+                )}
+
+                {(pending === 'reset' || pending === 'disable') && (
                   <div className="admin-confirm" role="group" aria-label="Confirm">
                     <p>
                       {pending === 'reset'
@@ -189,10 +241,15 @@ function UsersSection() {
   )
 }
 
-function describeUser(user: AdminUser, isSelf: boolean): string {
+function describeUser(user: AdminUser, isSelf: boolean, libraries: Library[]): string {
   const parts: string[] = []
   if (isSelf) parts.push('you')
   if (user.isAdmin) parts.push('admin')
+  else {
+    // What they see beyond the public libraries, which everyone sees.
+    const granted = libraries.filter((l) => !l.isPublic && user.libraryIds.includes(l.id))
+    if (granted.length > 0) parts.push(`also sees ${granted.map((l) => l.name).join(', ')}`)
+  }
   if (user.disabled) parts.push('disabled')
   if (user.mustChangePassword) parts.push('hasn’t chosen a passphrase yet')
   parts.push(`added ${formatDate(user.createdAt)}`)
@@ -253,31 +310,99 @@ function GrantPanel({ grant, onDone }: { grant: Grant; onDone: () => void }) {
   )
 }
 
-// ---------- Libraries ----------
-
-function LibrariesSection() {
-  const [libraries, setLibraries] = useState<Library[] | null>(null)
+/**
+ * Which private libraries one listener may see. Public libraries are listed for
+ * the whole picture but can't be unticked: everyone sees them. Saving sends the
+ * complete set, and applies from the listener's next request; nobody is signed out.
+ */
+function LibraryAccessPanel({
+  user,
+  libraries,
+  onCancel,
+  onSaved,
+}: {
+  user: AdminUser
+  libraries: Library[]
+  onCancel: () => void
+  onSaved: () => Promise<void>
+}) {
+  const [selected, setSelected] = useState(() => new Set(user.libraryIds))
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [adding, setAdding] = useState(false)
 
-  useEffect(() => {
-    const controller = new AbortController()
-    api
-      .libraries(controller.signal)
-      .then(setLibraries)
-      .catch((e: unknown) => {
-        if (!controller.signal.aborted) setError(describe(e))
-      })
-    return () => controller.abort()
-  }, [])
+  const original = new Set(user.libraryIds)
+  const changed = selected.size !== original.size || [...selected].some((id) => !original.has(id))
 
-  const refresh = async () => {
+  const toggle = (id: string, on: boolean) => {
+    const next = new Set(selected)
+    if (on) next.add(id)
+    else next.delete(id)
+    setSelected(next)
+  }
+
+  const save = async () => {
+    setSaving(true)
+    setError(null)
     try {
-      setLibraries(await api.libraries())
+      await api.setUserLibraries(user.id, [...selected])
+      await onSaved()
     } catch (e) {
       setError(describe(e))
+      setSaving(false)
     }
   }
+
+  return (
+    <div className="admin-confirm" role="group" aria-label={`Libraries ${user.username} can see`}>
+      <p>Which libraries can {user.username} see?</p>
+      <ul className="access-list">
+        {libraries.map((library) => (
+          <li key={library.id}>
+            <label className="access-option">
+              <input
+                type="checkbox"
+                checked={library.isPublic || selected.has(library.id)}
+                disabled={library.isPublic || saving}
+                onChange={(e) => toggle(library.id, e.target.checked)}
+              />
+              <span>{library.name}</span>
+              <span className="muted">
+                {library.isPublic ? 'public, everyone' : `${library.books} ${library.books === 1 ? 'book' : 'books'}`}
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <p className="access-note muted">Applies at once. They stay signed in.</p>
+      {error && (
+        <p className="admin-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="admin-confirm-actions">
+        <button type="button" className="pill pill-solid" disabled={!changed || saving} onClick={() => void save()}>
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" className="pill pill-quiet" disabled={saving} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------- Libraries ----------
+
+function LibrariesSection({
+  libraries,
+  error,
+  refresh,
+}: {
+  libraries: Library[] | null
+  error: string | null
+  refresh: () => Promise<void>
+}) {
+  const [adding, setAdding] = useState(false)
 
   return (
     <section className="admin-section" aria-labelledby="libraries-heading">
@@ -374,7 +499,7 @@ function LibraryRow({ library, onChange }: { library: Library; onChange: () => P
       <div className="admin-row-text">
         <span className="admin-row-name">{library.name}</span>
         <span className="admin-row-meta muted">
-          {library.isPublic ? 'public: every listener sees it' : 'private: only admins see it'} ·{' '}
+          {library.isPublic ? 'public: every listener sees it' : 'private: admins and listeners you grant it to'} ·{' '}
           {library.books} {library.books === 1 ? 'book' : 'books'} · {describeScan(library)}
         </span>
         <span className="admin-row-path">{library.rootPath}</span>

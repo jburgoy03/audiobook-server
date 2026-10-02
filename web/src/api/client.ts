@@ -150,6 +150,10 @@ export const api = {
   resetPassword: (id: string) => postJson<TemporaryPassword>(`/api/admin/users/${id}/reset-password`),
   disableUser: (id: string) => post(`/api/admin/users/${id}/disable`),
   enableUser: (id: string) => post(`/api/admin/users/${id}/enable`),
+  /** Replaces the account's grants with exactly these libraries. Answers 204. */
+  setUserLibraries: async (id: string, libraryIds: string[]) => {
+    await request(`/api/admin/users/${id}/libraries`, { method: 'PUT', body: { libraryIds } })
+  },
 
   // ---- Admin: libraries ----
 

@@ -1,6 +1,6 @@
 # Next steps: web client polish
 
-Small, independent fixes to the web client in `web/`. Status as of 2026-10-02.
+Small, independent fixes to the web client in `web/`. Status as of 2026-10-02 (afternoon).
 
 Auth, the sign-in page, synced progress and the jump offer are covered in
 [`auth-sync-deploy.md`](auth-sync-deploy.md), not here.
@@ -88,24 +88,15 @@ fonts, `web/public/icons.svg` and `web/src/main.tsx.new` are all gone.
 
 ## Remaining
 
-0. **Continue listening ignores the book that's playing. Next session's first item.**
-   Reported 2026-10-02: start or resume a book, go back to the library, and Continue
-   listening doesn't show it (or features another book), while the now-playing bar
-   does.
-   - *Cause.* The section is built from the progress store's **saved** positions
-     (`LibraryPage` → `progressStore.resumePoint`), not the player. The player saves
-     every 30s and on pause (`useBookPlayer`, `SAVE_INTERVAL_MS`), and a book counts
-     as started only past 60s (`STARTED_AFTER_SECONDS`). A new book takes up to ~90s
-     of listening to appear; a resumed one is ordered by its last *save*, so another
-     book can stay featured. The bar reads the live player, hence the mismatch.
-   - *Fix.* The active book (`nowPlaying`) is always first in Continue listening while
-     there is one, playing or paused, regardless of the 60s threshold, with its live
-     position; the rest follow by last activity as now. `FeaturedBook` already goes
-     live through `useLivePlayer` once it's the featured book. Also check the
-     compact items' "left" times and the All books progress ribbons for the same lag
-     (they read saved positions too; probably acceptable, but say so).
-   - *Test by hand:* resume a book that isn't featured, back to the library: it's
-     featured at once, with the live chapter line. A brand-new book, 10s in: featured.
+0. ~~**Continue listening ignores the book that's playing.**~~ **Done 2026-10-02.**
+   The section was built from saved positions (every 30s, and only past 60s). Now the
+   active book (`nowPlaying`), playing or paused, is always first, live, whatever its
+   position; the rest follow by last activity. `useActiveBookId()` returns only the id
+   (a string snapshot), so the library re-renders when the active book changes, not on
+   every time update. Compact items' "left" times needed nothing: they can no longer be
+   the active book, and other books' saved positions are exact (the player saves on
+   pause and when replaced). The All books tile of the active book reads the live
+   position (`LiveCover`), so it no longer lags or lacks a ribbon under 60s.
 
 1. **File-boundary gap.** Not measured yet. When a file ends, the next is loaded
    from scratch (`useBookPlayer`: `onEnded` → `loadFile`). Measure the silence
@@ -124,9 +115,12 @@ fonts, `web/public/icons.svg` and `web/src/main.tsx.new` are all gone.
    Shore 6 KB, Blind Willow 5 KB) and may look soft; Murakami's are the Japanese
    editions' (Dean's choice). The Name of the Wind's 175x175 art still wants a
    `cover.jpg`.
-4. **First-visit library. Now the priority item.** With nothing started (every new
-   user of the public library), there is no featured book. Feature a suggestion or
-   the most recently added book.
+4. ~~**First-visit library.**~~ **Done 2026-10-02.** With nothing active or in
+   progress, the most recently added unfinished book is featured under "Newly added"
+   (Play, length and chapter count instead of "0% listened"). `GET /api/books` now
+   carries `addedAt`. Heuristic: no curation needed, changes as books are added, but
+   arbitrary within one scan's batch. A hand-picked suggestion would need a per-book
+   flag.
 5. **Auto-scroll on tablet and phone.** The chapter list follows playback only on
    desktop. A "Jump to current chapter" control in the stacked layout would cover it.
 6. **Full visual pass at 768 and 375** in the new design. Checked at 1024 so far.

@@ -30,6 +30,10 @@ public sealed class ApiFixture : IAsyncLifetime
     public const string VisitorUsername = "visitor";
     public const string VisitorPassword = "a visitor's own passphrase";
 
+    /// <summary>A non-admin with a grant on the private library. For the visibility matrix.</summary>
+    public const string GrantedUsername = "granted";
+    public const string GrantedPassword = "a granted listener's passphrase";
+
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
@@ -119,6 +123,16 @@ public sealed class ApiFixture : IAsyncLifetime
         _ = Factory.Server;
 
         await CreateUserAsync(VisitorUsername, VisitorPassword);
+
+        var granted = await CreateUserAsync(GrantedUsername, GrantedPassword);
+        await using (var db = NewDbContext())
+        {
+            db.LibraryGrants.Add(new LibraryGrant
+            {
+                UserId = granted.Id, LibraryId = PrivateLibraryId, GrantedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
     }
 
     public async Task<Guid> UserIdAsync(string username)

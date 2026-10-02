@@ -5,6 +5,9 @@ namespace AudiobookServer.Api.Endpoints;
 
 public sealed record CreateUserRequest(string Username);
 
+/// <summary>The complete set of non-public libraries the account may see.</summary>
+public sealed record SetLibrariesRequest(List<Guid>? LibraryIds);
+
 /// <summary>Returned once, at creation or reset. Only the passphrase's hash is stored.</summary>
 public sealed record TemporaryPasswordResponse(Guid Id, string Username, string TemporaryPassword);
 
@@ -53,6 +56,15 @@ public static class AdminUserEndpoints
                 return Results.NotFound();
 
             var result = await accounts.DisableAsync(user, principal.GetUserId());
+            return result.Succeeded ? Results.NoContent() : Results.BadRequest(new { error = result.Message });
+        });
+
+        users.MapPut("/{id:guid}/libraries", async (Guid id, SetLibrariesRequest request, AccountAdmin accounts, CancellationToken ct) =>
+        {
+            if (await accounts.FindAsync(id.ToString()) is not { } user)
+                return Results.NotFound();
+
+            var result = await accounts.SetLibrariesAsync(user, request.LibraryIds ?? [], ct);
             return result.Succeeded ? Results.NoContent() : Results.BadRequest(new { error = result.Message });
         });
 

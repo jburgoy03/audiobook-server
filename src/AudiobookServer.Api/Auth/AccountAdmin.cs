@@ -13,7 +13,8 @@ public sealed record AccountSummary(
     DateTimeOffset CreatedAt,
     bool Disabled,
     bool MustChangePassword,
-    DateTimeOffset? LastSeenAt);
+    DateTimeOffset? LastSeenAt,
+    List<Guid> LibraryIds);
 
 public enum AccountFailure { None, NotFound, Conflict, Invalid }
 
@@ -66,7 +67,8 @@ public sealed class AccountAdmin(UserManager<User> users, AudiobookDbContext db)
                 u.CreatedAt,
                 u.LockoutEnd >= DisabledUntil,
                 u.MustChangePassword,
-                u.Devices.Max(d => (DateTimeOffset?)d.LastSeenAt)))
+                u.Devices.Max(d => (DateTimeOffset?)d.LastSeenAt),
+                db.LibraryGrants.Where(g => g.UserId == u.Id).Select(g => g.LibraryId).ToList()))
             .ToListAsync(ct);
 
     /// <summary>By username, or by ID when the argument is a GUID.</summary>
@@ -166,6 +168,40 @@ public sealed class AccountAdmin(UserManager<User> users, AudiobookDbContext db)
     {
         await users.SetLockoutEndDateAsync(user, null);
         await users.ResetAccessFailedCountAsync(user);
+        return AccountResult.Ok(user);
+    }
+
+    /// <summary>
+    /// Replaces the account's grants with exactly <paramref name="libraryIds"/>. A set,
+    /// not grant/revoke calls, so the admin page sends what its checkboxes show and a
+    /// repeated request changes nothing. No session ends: grants are read per request.
+    /// Grants on an admin or on a public library are stored but change nothing today;
+    /// they'd matter if the account stops being admin or the library goes private.
+    /// </summary>
+    public async Task<AccountResult> SetLibrariesAsync(User user, IReadOnlyCollection<Guid> libraryIds, CancellationToken ct = default)
+    {
+        var wanted = libraryIds.Distinct().ToList();
+        var known = await db.Libraries.CountAsync(l => wanted.Contains(l.Id), ct);
+        if (known != wanted.Count)
+            return AccountResult.Invalid("One or more of those libraries doesn't exist.");
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.LibraryGrants
+            .Where(g => g.UserId == user.Id && !wanted.Contains(g.LibraryId))
+            .ExecuteDeleteAsync(ct);
+        var existing = await db.LibraryGrants
+            .Where(g => g.UserId == user.Id)
+            .Select(g => g.LibraryId)
+            .ToListAsync(ct);
+        var now = DateTimeOffset.UtcNow;
+        db.LibraryGrants.AddRange(wanted.Except(existing).Select(id => new LibraryGrant
+        {
+            UserId = user.Id,
+            LibraryId = id,
+            GrantedAt = now,
+        }));
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
         return AccountResult.Ok(user);
     }
 

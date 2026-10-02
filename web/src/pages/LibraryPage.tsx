@@ -57,8 +57,20 @@ function progressFor(book: BookSummary): Progress | null {
  *
  * `savedPosition` is only used while the book isn't active; an active book
  * always shows the player's own position, so nothing here waits for a save.
+ *
+ * `fresh`: a book nobody has started (the first-visit pick). Same layout, but the
+ * button says Play and the line under the bar gives its length, not 0% listened.
+ * Once it plays it's the active book, and this is an ordinary feature again.
  */
-function FeaturedBook({ book, savedPosition }: { book: BookSummary; savedPosition: number }) {
+function FeaturedBook({
+  book,
+  savedPosition,
+  fresh = false,
+}: {
+  book: BookSummary
+  savedPosition: number
+  fresh?: boolean
+}) {
   const activate = useActivate()
   const live = useLivePlayer(book.id)
   const [detail, setDetail] = useState<BookDetail | null>(null)
@@ -82,6 +94,7 @@ function FeaturedBook({ book, savedPosition }: { book: BookSummary; savedPositio
   const chapter = chapterIndex >= 0 ? chapters[chapterIndex] : undefined
   const href = `/books/${book.id}`
   const playing = live?.playing ?? false
+  const unstarted = fresh && !live
 
   const onButton = async () => {
     if (live) {
@@ -135,8 +148,19 @@ function FeaturedBook({ book, savedPosition }: { book: BookSummary; savedPositio
         </p>
         <ChapterTimeline chapters={chapters} total={book.durationSeconds} value={position} />
         <p className="times">
-          <span>{Math.floor(fraction * 100)}% listened</span>
-          <span>{formatLength(book.durationSeconds - position)} left</span>
+          {unstarted ? (
+            <>
+              <span>
+                {book.chapters} {book.chapters === 1 ? 'chapter' : 'chapters'}
+              </span>
+              <span>{formatLength(book.durationSeconds)}</span>
+            </>
+          ) : (
+            <>
+              <span>{Math.floor(fraction * 100)}% listened</span>
+              <span>{formatLength(book.durationSeconds - position)} left</span>
+            </>
+          )}
         </p>
         <button
           type="button"
@@ -145,7 +169,7 @@ function FeaturedBook({ book, savedPosition }: { book: BookSummary; savedPositio
           aria-busy={starting || (live?.loading && !playing) ? true : undefined}
         >
           <PlayPauseIcon playing={playing} size={20} />
-          {playing ? 'Pause' : 'Resume'}
+          {playing ? 'Pause' : unstarted ? 'Play' : 'Resume'}
         </button>
       </div>
     </article>
@@ -208,6 +232,21 @@ export function LibraryPage() {
     return (active ? [active, ...rest] : rest).slice(0, MAX_IN_PROGRESS)
   }, [books, progress, activeId])
 
+  // A first visit (every new listener of the public library) has nothing to
+  // continue, so the newest book stands in: a heuristic, chosen because it needs
+  // no curation and changes as books are added. Finished books aren't offered.
+  const newest = useMemo(() => {
+    if (inProgress.length > 0 || !books) return null
+    let pick: BookSummary | null = null
+    for (const b of books) {
+      if (progressStore.resumePoint(b.id)?.isFinished) continue
+      if (!pick || b.addedAt > pick.addedAt) pick = b
+    }
+    return pick
+    // resumePoint reads the store, whose snapshot is `entries`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [books, inProgress, entries])
+
   if (error) {
     return (
       <p className="notice">
@@ -232,6 +271,15 @@ export function LibraryPage() {
 
   return (
     <>
+      {!featured && newest && (
+        <section className="shelf" aria-labelledby="newest-heading">
+          <div className="section-head">
+            <h2 id="newest-heading">Newly added</h2>
+          </div>
+          <FeaturedBook key={newest.id} book={newest} savedPosition={0} fresh />
+        </section>
+      )}
+
       {featured && (
         <section className="shelf" aria-labelledby="continue-heading">
           <div className="section-head">
