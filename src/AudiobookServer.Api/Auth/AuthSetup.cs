@@ -113,19 +113,51 @@ public static class AuthSetup
             .AddClaimsPrincipalFactory<AudiobookClaimsPrincipalFactory>()
             .AddSignInManager();
 
-        // Secure by default: every endpoint needs a signed-in user unless it says
-        // otherwise. Login, refresh, logout and the web client's shell opt out.
-        // Admin endpoints ask for more: a signed-in user with the admin claim. Signed
-        // out is still a 401 (challenge); signed in without the claim is a 403.
+        // A cookie is checked against the user's security stamp at most this often. Every
+        // account change that must end sessions (passphrase changed or reset, disabled,
+        // admin granted or removed) updates the stamp, so this is how long a browser can
+        // keep going after one. The default is 30 minutes; 5 costs one small query per
+        // signed-in user per 5 minutes. Refresh tokens are checked on every refresh;
+        // access tokens live out their hour regardless (the accepted gap).
+        services.Configure<SecurityStampValidatorOptions>(o => o.ValidationInterval = TimeSpan.FromMinutes(5));
+
+        // Secure by default: every endpoint needs a signed-in user whose passphrase is
+        // settled, unless it says otherwise. Login, refresh, logout and the web client's
+        // shell opt out entirely; "who am I" and change-password ask only for SignedIn,
+        // so a user holding a temporary passphrase can do exactly those and nothing else
+        // (403 everywhere else).
+        // Admin endpoints ask for more: the admin claim too. Signed out is still a 401
+        // (challenge); signed in without the claim is a 403.
+        // Named policies replace the fallback rather than adding to it, which is why the
+        // settled-passphrase rule is repeated in Admin.
         services.AddAuthorizationBuilder()
             .SetFallbackPolicy(new AuthorizationPolicyBuilder(CookieOrBearer)
                 .RequireAuthenticatedUser()
+                .AddRequirements(new PassphraseSettledRequirement())
                 .Build())
+            .AddPolicy(AuthPolicies.SignedIn, p => p
+                .AddAuthenticationSchemes(CookieOrBearer)
+                .RequireAuthenticatedUser())
             .AddPolicy(AuthPolicies.Admin, p => p
                 .AddAuthenticationSchemes(CookieOrBearer)
                 .RequireAuthenticatedUser()
-                .RequireClaim(AuthPolicies.AdminClaim, "true"));
+                .RequireClaim(AuthPolicies.AdminClaim, "true")
+                .AddRequirements(new PassphraseSettledRequirement()));
+
+        services.AddScoped<AccountAdmin>();
 
         return services;
+    }
+}
+
+/// <summary>The user doesn't hold a temporary passphrase (no must-change claim).</summary>
+public sealed class PassphraseSettledRequirement
+    : AuthorizationHandler<PassphraseSettledRequirement>, IAuthorizationRequirement
+{
+    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, PassphraseSettledRequirement requirement)
+    {
+        if (!context.User.MustChangePassword())
+            context.Succeed(requirement);
+        return Task.CompletedTask;
     }
 }

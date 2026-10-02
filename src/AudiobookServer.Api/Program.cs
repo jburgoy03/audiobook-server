@@ -1,14 +1,34 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AudiobookServer.Api.Auth;
+using AudiobookServer.Api.Cli;
 using AudiobookServer.Api.Endpoints;
 using AudiobookServer.Core.Data;
 using AudiobookServer.Core.Media;
 using AudiobookServer.Core.Scanning;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Console;
 
-var builder = WebApplication.CreateBuilder(args);
+// `admin …` runs a server command (Cli/AdminCommand.cs) with the same configuration and
+// services as the API, then exits without starting the web server. Its arguments are
+// kept away from the host: the command-line configuration provider would read
+// "--force" as a setting.
+string[]? adminArgs = args is ["admin", .. var rest] ? rest : null;
+
+var builder = WebApplication.CreateBuilder(adminArgs is null ? args : []);
+
+if (adminArgs is not null)
+{
+    // Logs to stderr, so stdout carries only the command's output; and without EF's or
+    // the host's chatter. The scanner's own logs still show, as progress.
+    builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+    {
+        ["Logging:LogLevel:Microsoft.EntityFrameworkCore"] = "Warning",
+        ["Logging:LogLevel:Microsoft.Hosting"] = "Warning",
+    });
+    builder.Services.Configure<ConsoleLoggerOptions>(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+}
 
 builder.Services.AddDbContext<AudiobookDbContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
@@ -48,6 +68,12 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+if (adminArgs is not null)
+{
+    Environment.ExitCode = await AdminCommand.RunFromConsoleAsync(app.Services, adminArgs);
+    return;
+}
+
 await UserSeeder.SeedAsync(app.Services);
 
 app.UseForwardedHeaders();
@@ -82,6 +108,7 @@ if (app.Environment.IsDevelopment())
 app.MapAuthEndpoints();
 app.MapProgressEndpoints();
 app.MapLibraryEndpoints();
+app.MapAdminUserEndpoints();
 app.MapBookEndpoints();
 
 // An unknown /api route is a 404, never the web client's index.html.

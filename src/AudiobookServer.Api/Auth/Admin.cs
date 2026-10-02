@@ -10,12 +10,23 @@ public static class AuthPolicies
     /// <summary>Policy for everything that manages the server: libraries, scans, users.</summary>
     public const string Admin = "Admin";
 
+    /// <summary>
+    /// Signed in, nothing more. Only for the few endpoints a user still needs while they
+    /// must change their passphrase: "who am I" and change-password. Everything else
+    /// goes through the fallback policy, which also requires the passphrase to be settled.
+    /// </summary>
+    public const string SignedIn = "SignedIn";
+
     /// <summary>Present, with value "true", only on an admin's principal.</summary>
     public const string AdminClaim = "admin";
+
+    /// <summary>Present, with value "true", while the user still holds a temporary passphrase.</summary>
+    public const string MustChangePasswordClaim = "must_change_password";
 }
 
 /// <summary>
-/// Adds the admin claim when <see cref="User.IsAdmin"/> is set.
+/// Adds the admin claim when <see cref="User.IsAdmin"/> is set, and the
+/// must-change-password claim when <see cref="User.MustChangePassword"/> is.
 ///
 /// Every principal goes through this factory: cookie sign-in, bearer sign-in, token
 /// refresh, and the cookie's periodic security-stamp revalidation. So one class
@@ -33,6 +44,8 @@ public sealed class AudiobookClaimsPrincipalFactory(UserManager<User> users, IOp
         var identity = await base.GenerateClaimsAsync(user);
         if (user.IsAdmin)
             identity.AddClaim(new Claim(AuthPolicies.AdminClaim, "true"));
+        if (user.MustChangePassword)
+            identity.AddClaim(new Claim(AuthPolicies.MustChangePasswordClaim, "true"));
         return identity;
     }
 }

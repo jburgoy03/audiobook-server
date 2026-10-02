@@ -27,6 +27,11 @@ public class AdminTests(ApiFixture api)
         { "PATCH", "/api/libraries/{library}" },
         { "POST", "/api/libraries/{library}/scan" },
         { "POST", "/api/libraries/{library}/scan?force=true" },
+        { "GET", "/api/admin/users" },
+        { "POST", "/api/admin/users" },
+        { "POST", "/api/admin/users/{user}/reset-password" },
+        { "POST", "/api/admin/users/{user}/disable" },
+        { "POST", "/api/admin/users/{user}/enable" },
     };
 
     public static TheoryData<string, string, string> AdminRoutesByClient
@@ -169,7 +174,8 @@ public class AdminTests(ApiFixture api)
     private static HttpRequestMessage Request(string method, string route)
     {
         var request = new HttpRequestMessage(
-            new HttpMethod(method), route.Replace("{library}", Guid.NewGuid().ToString()));
+            new HttpMethod(method),
+            route.Replace("{library}", Guid.NewGuid().ToString()).Replace("{user}", Guid.NewGuid().ToString()));
         if (method is "POST" or "PATCH")
             request.Content = JsonContent.Create(new { });
         return request;

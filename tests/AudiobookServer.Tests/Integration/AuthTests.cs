@@ -31,6 +31,12 @@ public class AuthTests(ApiFixture api)
         { "GET", "/api/progress" },
         { "POST", "/api/progress" },
         { "GET", "/api/auth/me" },
+        { "POST", "/api/auth/change-password" },
+        { "GET", "/api/admin/users" },
+        { "POST", "/api/admin/users" },
+        { "POST", "/api/admin/users/{user}/reset-password" },
+        { "POST", "/api/admin/users/{user}/disable" },
+        { "POST", "/api/admin/users/{user}/enable" },
         { "GET", "/api/no-such-route" },
     };
 
@@ -41,7 +47,8 @@ public class AuthTests(ApiFixture api)
         using var client = api.CreateClient();
         var url = route
             .Replace("{book}", api.StreamableBookId.ToString())
-            .Replace("{library}", Guid.NewGuid().ToString());
+            .Replace("{library}", Guid.NewGuid().ToString())
+            .Replace("{user}", Guid.NewGuid().ToString());
 
         var request = new HttpRequestMessage(new HttpMethod(method), url);
         if (method == "POST")

@@ -18,4 +18,8 @@ public static class ClaimsPrincipalExtensions
     /// </summary>
     public static bool IsAdmin(this ClaimsPrincipal principal) =>
         principal.HasClaim(AuthPolicies.AdminClaim, "true");
+
+    /// <summary>Whether this principal still holds a temporary passphrase.</summary>
+    public static bool MustChangePassword(this ClaimsPrincipal principal) =>
+        principal.HasClaim(AuthPolicies.MustChangePasswordClaim, "true");
 }
