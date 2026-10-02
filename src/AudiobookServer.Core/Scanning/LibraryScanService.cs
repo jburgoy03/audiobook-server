@@ -48,12 +48,17 @@ public class LibraryScanService(
 
         int added = 0, updated = 0, unchanged = 0, removed = 0, failures = 0, corrected = 0;
 
+        // Every book folder this walk found, failed or not, for removing books whose
+        // folder is gone (after the loop).
+        var seenDirectories = new HashSet<string>(StringComparer.Ordinal);
+
         foreach (var candidate in walker.FindBooks(library.RootPath))
         {
             ct.ThrowIfCancellationRequested();
 
             var directoryKey = LibraryPaths.Relative(library.RootPath, candidate.DirectoryPath);
             var splitPrefix = directoryKey + "#";
+            seenDirectories.Add(directoryKey);
 
             try
             {
@@ -130,6 +135,8 @@ public class LibraryScanService(
             }
         }
 
+        removed += await RemoveMissingAsync(libraryId, library.Name, seenDirectories, ct);
+
         var libraryToFinish = await db.Libraries.FirstAsync(l => l.Id == libraryId, ct);
         libraryToFinish.LastScanCompletedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
@@ -189,6 +196,49 @@ public class LibraryScanService(
         }
 
         return corrected.Count;
+    }
+
+    /// <summary>
+    /// Removes the library's books whose folder the walk didn't find: a folder deleted,
+    /// renamed or moved out. Their files, chapters and everyone's positions go with them
+    /// (cascade); the book comes back as new if the folder returns.
+    ///
+    /// Guarded against the destructive case: when the walk found no book folders at all
+    /// (drive not mounted, wrong root path), nothing is removed. A library that really
+    /// is empty keeps its old books until it has at least one folder again. Not guarded:
+    /// a single subfolder the walker couldn't read is indistinguishable from a deleted
+    /// one, so its book is removed and returns at the next scan that can read it.
+    /// </summary>
+    private async Task<int> RemoveMissingAsync(
+        Guid libraryId, string libraryName, HashSet<string> seenDirectories, CancellationToken ct)
+    {
+        if (seenDirectories.Count == 0)
+        {
+            logger.LogWarning(
+                "{Library}: no book folders found, so no books were removed. Is the drive mounted?", libraryName);
+            return 0;
+        }
+
+        var stored = await db.Books
+            .AsNoTracking()
+            .Where(b => b.LibraryId == libraryId)
+            .Select(b => new { b.Id, b.RelativePath, b.Title })
+            .ToListAsync(ct);
+
+        // A split book's key is "<directory>#<album>"; it belongs to its directory.
+        var missing = stored
+            .Where(b => !seenDirectories.Contains(b.RelativePath) &&
+                        !seenDirectories.Any(d => b.RelativePath.StartsWith(d + "#", StringComparison.Ordinal)))
+            .ToList();
+
+        if (missing.Count == 0)
+            return 0;
+
+        foreach (var book in missing)
+            logger.LogInformation("{Library}: removing {Title} ({Path}); its folder is gone", libraryName, book.Title, book.RelativePath);
+
+        var ids = missing.Select(b => b.Id).ToList();
+        return await db.Books.Where(b => ids.Contains(b.Id)).ExecuteDeleteAsync(ct);
     }
 
     /// <summary>
