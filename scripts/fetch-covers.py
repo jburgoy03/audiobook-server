@@ -54,14 +54,34 @@ def parse_folder(name):
     return (match["title"], match["author"]) if match else (name, None)
 
 
-def search(title, author):
-    """Open Library's best match that has a cover, or None."""
-    params = {"title": title, "fields": "title,author_name,first_publish_year,cover_i", "limit": "10"}
-    if author:
-        params["author"] = author
+def query(params):
+    params = {**params, "fields": "title,author_name,first_publish_year,cover_i", "limit": "10", "lang": "en"}
     with get("https://openlibrary.org/search.json?" + urllib.parse.urlencode(params)) as response:
         docs = json.load(response).get("docs", [])
     return next((d for d in docs if d.get("cover_i")), None)
+
+
+def search(title, author):
+    """
+    Open Library's best match that has a cover, and how it was found, or (None, None).
+
+    Strict first: title and author fields. Translated authors are often catalogued
+    under their original name (Murakami as 村上春樹), which the author field misses, so
+    then a general query, which also searches authors' other names. "lang=en" asks for
+    English editions' titles and covers where the work has them.
+    """
+    if author:
+        doc = query({"title": title, "author": author})
+        if doc:
+            return doc, "title+author"
+        doc = query({"q": f"{title} {author}"})
+        if doc:
+            return doc, "general"
+    else:
+        doc = query({"title": title})
+        if doc:
+            return doc, "title only"
+    return None, None
 
 
 def main(argv):
@@ -91,7 +111,7 @@ def main(argv):
 
         title, author = override.split("|", 1) if "|" in override else parse_folder(folder)
         try:
-            doc = search(title.strip(), author.strip() if author else None)
+            doc, how = search(title.strip(), author.strip() if author else None)
         except (urllib.error.URLError, TimeoutError, ValueError) as e:
             print(f"!! {folder}: search failed ({e})")
             problems += 1
@@ -103,7 +123,7 @@ def main(argv):
             continue
 
         url = f"https://covers.openlibrary.org/b/id/{doc['cover_i']}-L.jpg?default=false"
-        found = f"{doc.get('title')} ({', '.join(doc.get('author_name', [])[:2])}, {doc.get('first_publish_year', '?')})"
+        found = f"{doc.get('title')} ({', '.join(doc.get('author_name', [])[:2])}, {doc.get('first_publish_year', '?')}) [{how}]"
 
         if dry_run:
             print(f"?? {folder}\n   -> {found}\n   {url}")
