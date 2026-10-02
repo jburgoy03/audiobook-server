@@ -1,11 +1,15 @@
 import type {
+  AdminUser,
   BookDetail,
   BookSummary,
   CurrentUser,
   Library,
+  NewLibrary,
   ProgressDto,
   ProgressReport,
   ProgressResult,
+  ScanReport,
+  TemporaryPassword,
 } from './types'
 
 /** The server answered 401. The auth store has already been told. */
@@ -88,6 +92,16 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T
 }
 
+async function postJson<T>(path: string, body?: unknown, method = 'POST'): Promise<T> {
+  const response = await request(path, { method, body })
+  return (await response.json()) as T
+}
+
+/** For endpoints that answer 204. */
+async function post(path: string, body?: unknown): Promise<void> {
+  await request(path, { method: 'POST', body })
+}
+
 export const api = {
   libraries: (signal?: AbortSignal) => getJson<Library[]>('/api/libraries', signal),
   books: (signal?: AbortSignal) => getJson<BookSummary[]>('/api/books', signal),
@@ -122,6 +136,28 @@ export const api = {
     const response = await request('/api/auth/me', { notifyUnauthorized: notify })
     return (await response.json()) as CurrentUser
   },
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await post('/api/auth/change-password', { currentPassword, newPassword })
+  },
+
+  // ---- Admin: users ----
+  // A 403 from these surfaces as an HttpError for the page to show; only a
+  // 401 signs the app out.
+
+  adminUsers: (signal?: AbortSignal) => getJson<AdminUser[]>('/api/admin/users', signal),
+  createUser: (username: string) => postJson<TemporaryPassword>('/api/admin/users', { username }),
+  resetPassword: (id: string) => postJson<TemporaryPassword>(`/api/admin/users/${id}/reset-password`),
+  disableUser: (id: string) => post(`/api/admin/users/${id}/disable`),
+  enableUser: (id: string) => post(`/api/admin/users/${id}/enable`),
+
+  // ---- Admin: libraries ----
+
+  createLibrary: (library: NewLibrary) => postJson<Library>('/api/libraries', library),
+  updateLibrary: (id: string, changes: { isPublic?: boolean; credit?: string }) =>
+    postJson<Library>(`/api/libraries/${id}`, changes, 'PATCH'),
+  scanLibrary: (id: string, force: boolean) =>
+    postJson<ScanReport>(`/api/libraries/${id}/scan${force ? '?force=true' : ''}`),
 
   // ---- Progress ----
 

@@ -8,7 +8,7 @@ docker exec audiobook-api ./AudiobookServer.Api admin reset-password dean
 docker exec audiobook-api ./AudiobookServer.Api admin scan LibriVox --force
 ```
 
-Status: **planned, not started.** Written 2026-10-02. Small: about an hour.
+Status: **done 2026-10-02.** Usage is documented in `docs/deploy.md` ("The `admin` command", "Locked out?").
 
 ## Why
 

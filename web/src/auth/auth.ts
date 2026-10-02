@@ -20,6 +20,12 @@ export type AuthState =
   | { status: 'signedOut'; expired?: boolean }
   | { status: 'signingOut' }
   | { status: 'signedIn'; username: string; isAdmin: boolean }
+  /**
+   * Signed in with a temporary passphrase the admin handed over. The server
+   * answers 403 to everything but /me, change-password and logout until it's
+   * replaced, so the app shows only the passphrase page: no library, no player.
+   */
+  | { status: 'mustChangePassword'; username: string }
 
 let state: AuthState = { status: 'checking' }
 const listeners = new Set<() => void>()
@@ -41,6 +47,11 @@ export function useAuth(): AuthState {
 }
 
 function signedIn(me: CurrentUser) {
+  if (me.mustChangePassword) {
+    // Not progressStore.start(): its first request would be a 403.
+    setState({ status: 'mustChangePassword', username: me.username })
+    return
+  }
   setState({ status: 'signedIn', username: me.username, isAdmin: me.isAdmin })
   void progressStore.start()
 }
@@ -48,7 +59,7 @@ function signedIn(me: CurrentUser) {
 // Any 401 while signed in: the session expired, or this user signed out in
 // another tab. Pending positions stay in the browser and upload after sign-in.
 setUnauthorizedHandler(() => {
-  if (state.status !== 'signedIn') return
+  if (state.status !== 'signedIn' && state.status !== 'mustChangePassword') return
   progressStore.stop()
   setState({ status: 'signedOut', expired: true })
 })
@@ -88,13 +99,44 @@ export async function login(username: string, password: string): Promise<void> {
     if (e instanceof HttpError && e.status === 429) {
       throw new Error(e.detail ?? 'Too many attempts. Try again in a few minutes.', { cause: e })
     }
+    // Only said to someone with the right passphrase (see the login endpoint).
+    if (e instanceof HttpError && e.status === 403) {
+      throw new Error(e.detail ?? 'This account is disabled.', { cause: e })
+    }
     throw new Error('The server couldn’t be reached. Try again in a moment.', { cause: e })
   }
   const me = await api.me(false)
   signedIn(me)
 }
 
+/**
+ * Replaces the caller's passphrase. The server ends every other session and
+ * re-issues this one's cookie, so afterwards /me answers with the new state
+ * (no longer must-change), and the app opens on the library.
+ * Throws an Error with a message fit to show on failure.
+ */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  try {
+    await api.changePassword(currentPassword, newPassword)
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 400 && e.detail) throw new Error(e.detail, { cause: e })
+    if (e instanceof UnauthorizedError) throw e
+    throw new Error('The server couldn’t be reached. Try again in a moment.', { cause: e })
+  }
+  signedIn(await api.me())
+}
+
 export async function logout(): Promise<void> {
+  if (state.status === 'mustChangePassword') {
+    // No player is mounted and nothing is pending: just end the session.
+    try {
+      await api.logout()
+    } catch {
+      // Signed out either way.
+    }
+    setState({ status: 'signedOut' })
+    return
+  }
   if (state.status !== 'signedIn') return
 
   // flushSync renders the signed-out tree now, inside this call. The player

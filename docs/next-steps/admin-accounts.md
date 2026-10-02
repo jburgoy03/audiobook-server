@@ -17,7 +17,7 @@ jobs that don't belong in a browser at all (passphrase recovery, scans without t
 100-second limit) go to the command-line tool:
 [`admin-cli.md`](admin-cli.md).
 
-Status: **planned, not started.** Written 2026-10-01. This is option A from
+Status: **done 2026-10-02** (server, passphrase page, admin page with Users and Libraries). Written 2026-10-01. This is option A from
 [`users-and-public-library.md`](users-and-public-library.md) section 3. Invites
 (option B) come after and reuse most of this: the admin page, the passphrase page,
 disable and enable.

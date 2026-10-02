@@ -62,6 +62,46 @@ export interface CurrentUser {
   username: string
   /** Shows admin controls. Convenience only: the server enforces admin on its own. */
   isAdmin: boolean
+  /** Holding a temporary passphrase: the server allows nothing else until it's changed. */
+  mustChangePassword: boolean
+}
+
+/** One row of GET /api/admin/users. */
+export interface AdminUser {
+  id: string
+  username: string
+  isAdmin: boolean
+  createdAt: string
+  disabled: boolean
+  mustChangePassword: boolean
+  /** Latest playback report from any of their devices; null if they've never played. */
+  lastSeenAt: string | null
+}
+
+/** Returned once, by create and reset. Only the hash is stored on the server. */
+export interface TemporaryPassword {
+  id: string
+  username: string
+  temporaryPassword: string
+}
+
+/** Response of POST /api/libraries/{id}/scan. */
+export interface ScanReport {
+  booksAdded: number
+  booksUpdated: number
+  booksUnchanged: number
+  booksRemoved: number
+  failures: number
+  filesDurationCorrected: number
+  totalSeen: number
+}
+
+/** Body of POST /api/libraries. */
+export interface NewLibrary {
+  name: string
+  rootPath: string
+  isPublic: boolean
+  credit: string | null
 }
 
 /** What the server holds for one book: GET /api/progress, and inside a ProgressResult. */

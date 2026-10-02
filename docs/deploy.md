@@ -47,7 +47,7 @@ Why these choices:
 | `HOST_PORT` | `5043` |
 | `DB_NETWORK` | `audiobook_default` |
 | `TUNNEL_NETWORK` | `portfolio_portfolio-net` |
-| `SEED_USERNAME` / `SEED_PASSWORD` | Creates the account on first start, only if no user exists. Safe to remove afterwards. |
+| `SEED_USERNAME` / `SEED_PASSWORD` | Creates the account on first start, only if no user exists. Safe to remove afterwards. On a fresh install, `admin create-user <name> --admin` (below) does the same without a passphrase in `.env`. |
 
 Editing without an editor (no arrow keys over some terminals): set values with
 `sed`, and the passphrase with `read -s` so it never shows or lands in history:
@@ -74,70 +74,72 @@ From Windows: commit and push. Then on the server (one at a time):
 
 After a deploy that adds or changes claims (the `admin` claim did, on 2026-10-01),
 **sign out and back in**. A cookie keeps the claims it was issued with until its
-next security-stamp check (30 minutes), so an admin's old cookie gets 403 on admin
-endpoints in the meantime.
+next security-stamp check (every 5 minutes since 2026-10-02; 30 before), so an old
+cookie can get 403 in the meantime.
 
 The API does not migrate on startup. That's deliberate: a migration is a decision,
 and running it by hand keeps a bad one from being applied by a restart.
 
-## Rescanning
+## The `admin` command
 
-**Interim.** The console snippets in this file are a stopgap until the admin page's
-Libraries section (`docs/next-steps/admin-accounts.md`) and the `admin` command
-(`docs/next-steps/admin-cli.md`) exist; both will replace them. Don't add more.
-
-The scan endpoint needs a signed-in admin, so for now run it from the browser's
-console on the site (F12 → Console; Chrome asks you to type `allow pasting` first).
-
-**Use the Tailscale address (`http://100.83.139.4:5043`), never the public
-hostname.** Cloudflare gives up on a request after 100 seconds (524), and the scan
-runs on the request's cancellation token, so it would be cancelled partway. This
-holds until scanning moves to a background service.
-
-Signed in as an admin (library endpoints are admin-only). Pick the library by name,
-since there's more than one:
+Server jobs run as the API binary with `admin` first, inside the running container.
+It uses the container's own configuration (database, paths), runs, and exits; the
+web server keeps running alongside. No sign-in: whoever can run `docker exec` already
+controls the server.
 
 ```
-const lib = (await (await fetch('/api/libraries')).json()).find(l => l.name === 'Audiobooks'); await (await fetch(`/api/libraries/${lib.id}/scan?force=true`, { method: 'POST' })).json()
+docker exec audiobook-api ./AudiobookServer.Api admin users
 ```
 
-`force=true` re-probes unchanged files. Use it after scanner changes (durations,
-covers); a plain scan skips files whose mtime hasn't changed. The request returns
-when the scan finishes (minutes: mp3 packet counting reads every file in full).
+| Command | Does |
+|---|---|
+| `users` | Lists accounts: admin, disabled, passphrase still temporary, last listened. |
+| `create-user <name> [--admin] [--temporary]` | Creates an account. Prompts for the passphrase, or with `--temporary` prints one they must change at first sign-in. |
+| `reset-password <name> [--temporary]` | Replaces a passphrase (prompted, or generated). Clears a lockout and ends their sessions. |
+| `set-admin <name> true\|false` | Grants or removes admin. Refuses to remove the last admin. |
+| `enable <name>` | Re-enables a disabled or locked-out account. |
+| `libraries` | Lists libraries: public or private, book count, last scan. |
+| `scan <library> [--force]` | Scans a library by name (or ID) and prints the report. Ctrl+C cancels. |
 
-## The public-domain library
+**Prompts need a terminal: `docker exec -it`.** Passphrases are never arguments, so
+they stay out of shell history and `ps`. Without `-it` the prompt gets no input and
+the command says so.
 
-LibriVox recordings live in `/mnt/media/librivox`, one folder per book
-(`Title - Author`), mounted read-only like the main library. The library row has `isPublic: true`, so every
-signed-in user sees these books; the main library stays admin-only.
+Exit codes: 0 success, 1 failure, 2 bad usage.
 
-Fetch books with `scripts/librivox-fetch.py` (mp3s and the cover only; it skips the
-per-track spectrogram PNGs, which would otherwise compete to be the cover):
+## Accounts
+
+Day to day, from the **Admin** page (link in the masthead, admins only):
+
+- **Add listener:** type a name. The page shows a temporary passphrase once, with
+  Copy (on the HTTPS hostname; on the Tailscale address, which is plain HTTP, the
+  button selects it instead). Hand it over; they choose their own at first sign-in,
+  and until then the server refuses them everything else.
+- **Reset passphrase:** a new temporary one, shown once; their sessions end.
+- **Disable / Enable:** a disabled account can't sign in, and open sessions end within
+  five minutes (refresh tokens at once; an Android access token within its hour).
+
+The same rules apply from the `admin` command. Every listener sees the public
+libraries only; the private library is never shared.
+
+## Libraries and scanning
+
+From the **Admin** page: make a library public or private (making one public asks
+first, with its book count), edit its credit, **Scan**, **Force rescan**, or add one.
+
+**Big scans: use `admin scan` or the Tailscale address, never the public hostname.**
+Cloudflare gives up on a request after 100 seconds (524), and a scan from the page
+runs inside the request, so it would be cancelled partway. The page warns about this
+on the public hostname. A small scan (a new LibriVox book) is fine anywhere. From the
+server, with no time limit:
 
 ```
-python3 scripts/librivox-fetch.py /mnt/media/librivox "IDENTIFIER=Title - Author"
+docker exec -it audiobook-api ./AudiobookServer.Api admin scan Audiobooks --force
 ```
 
-The identifier is the archive.org item (`archive.org/details/<identifier>`). Rerun
-the same command after a failure: finished files are skipped. Then scan the
-`LibriVox` library over Tailscale (the snippet above, with `'LibriVox'`).
-
-**`/mnt/media` itself is immutable** (`chattr +i`, on the drive's top folder). New
-folders *inside* `librivox` or `audiobooks` are fine, but a new top-level folder
-needs the flag lifted and restored:
-
-```
-sudo chattr -i /mnt/media && mkdir /mnt/media/<name> && sudo chattr +i /mnt/media
-```
-
-Registered once, from the console on the Tailscale address:
-
-```
-await (await fetch('/api/libraries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'LibriVox', rootPath: '/mnt/media/librivox', isPublic: true, credit: 'Public domain · LibriVox' }) })).json()
-```
-
-Make a library public or private later with
-`PATCH /api/libraries/{id}` and `{ "isPublic": false }`.
+`--force` re-probes unchanged files. Use it after scanner changes (durations,
+covers); a plain scan skips files whose mtime hasn't changed. mp3 packet counting
+reads every file in full, so a forced scan of the big library takes minutes.
 
 ## Checks
 
@@ -148,12 +150,28 @@ Make a library public or private later with
 
 ## Locked out?
 
-There is no recovery path yet: a forgotten admin passphrase means editing the
-database. `admin reset-password` (`docs/next-steps/admin-cli.md`) is the fix.
+Over SSH on the server, one at a time:
+
+1. See the state of things: `docker exec audiobook-api ./AudiobookServer.Api admin users`
+2. Forgotten passphrase: `docker exec -it audiobook-api ./AudiobookServer.Api admin reset-password dean`
+   (prompts twice; ends your other sessions; clears a lockout).
+3. Account disabled, or still locked after too many attempts:
+   `docker exec audiobook-api ./AudiobookServer.Api admin enable dean`
+4. Sign in again.
+
+Nothing else is needed: no database edits, no restart. If `./AudiobookServer.Api` is
+ever missing from an image, `dotnet AudiobookServer.Api.dll admin …` is the same
+command.
 
 ## Still manual
 
 - No CI: images are built on the server. Planned: GitHub Actions → GHCR → deploy over
   Tailscale with an ephemeral auth key.
-- Cloudflare dashboard: the public hostname route and a rate-limiting rule on
-  `POST /api/auth/login` live there, not in this repo.
+- Cloudflare dashboard: the public hostname route and the rate-limiting rule live
+  there, not in this repo. The rule (Security → Security rules, "Login throttle",
+  2026-10-02): URI path equals `/api/auth/login`, 5 requests per 10 seconds per IP,
+  block for 10 seconds, which is everything the free plan allows (one rule, path only,
+  10-second period and block). Verified: the sixth rapid attempt gets Cloudflare's 429
+  (error 1015) and never reaches the API. It slows guessing across accounts; it can't
+  stop someone locking out a known name (five tries fit in one window). `admin enable`
+  undoes that. It doesn't apply over Tailscale.
