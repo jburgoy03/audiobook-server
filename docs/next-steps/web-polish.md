@@ -146,7 +146,7 @@ fonts, `web/public/icons.svg` and `web/src/main.tsx.new` are all gone.
 8. **Light mode** was removed deliberately. If it comes back, it needs its own
    palette pass rather than inverted tokens.
 
-9. **Volume control. In progress (2026-10-02).** Decisions (Dean):
+9. ~~**Volume control.**~~ **Done and deployed 2026-10-02.** Decisions (Dean):
    - **Both** a mute button (speaker icon) and a slider. On touch screens, mute only:
      hardware buttons set the level, and iPhone Safari ignores `audio.volume`
      entirely (only `muted` works). Detected by setting the volume and reading it
