@@ -99,6 +99,25 @@ export const SkipIcon = ({ size = 30, forward = false }: IconProps & { forward?:
     </>,
   )
 
+// A speaker with up to two waves for the level, or a cross when silent. Three
+// states, not four: a third wave doesn't fit the 24-unit grid at this stroke.
+const SPEAKER = 'M3.5 9.5 H7 L11.5 5.5 V18.5 L7 14.5 H3.5 Z'
+export const VolumeIcon = ({ level, muted, size = 22 }: IconProps & { level: number; muted: boolean }) =>
+  icon(
+    size,
+    <>
+      <path d={SPEAKER} />
+      {muted ? (
+        <path d="M16.25 9.75 L20.75 14.25 M20.75 9.75 L16.25 14.25" />
+      ) : (
+        <>
+          {level > 0 && <path d="M14.75 9.5 A3.6 3.6 0 0 1 14.75 14.5" />}
+          {level >= 0.5 && <path d="M17.25 7 A7.2 7.2 0 0 1 17.25 17" />}
+        </>
+      )}
+    </>,
+  )
+
 export const BackIcon = ({ size = 18 }: IconProps) => icon(size, <path d="M14.5 6 L8.5 12 L14.5 18" />)
 
 /**

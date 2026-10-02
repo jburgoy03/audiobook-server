@@ -3,9 +3,11 @@
 // site data) and the player must still work without it, just without memory.
 //
 // Positions themselves live in the progress store (progress.ts), which syncs with
-// the server; this file only persists its offline cache. Speed stays per browser.
+// the server; this file only persists its offline cache. Speed and volume stay
+// per browser.
 
 const RATE_KEY = 'audiobook:rate'
+const VOLUME_KEY = 'audiobook:volume'
 const DEVICE_KEY = 'audiobook:device'
 const PROGRESS_KEY = 'audiobook:progress'
 // Before sync, each book had its own key. Read once, uploaded, then removed.
@@ -36,6 +38,18 @@ export function loadRate(): number {
 
 export function saveRate(rate: number): void {
   write(RATE_KEY, String(rate))
+}
+
+// ---- Volume: the slider's position (0–1), one setting for every book ----
+
+export function loadVolume(): number {
+  const stored = read(VOLUME_KEY)
+  const level = stored === null ? NaN : Number(stored)
+  return level >= 0 && level <= 1 ? level : 1
+}
+
+export function saveVolume(level: number): void {
+  write(VOLUME_KEY, String(level))
 }
 
 // ---- This browser's identity, for the server's Device table ----

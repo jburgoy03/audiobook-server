@@ -146,6 +146,27 @@ fonts, `web/public/icons.svg` and `web/src/main.tsx.new` are all gone.
 8. **Light mode** was removed deliberately. If it comes back, it needs its own
    palette pass rather than inverted tokens.
 
+9. **Volume control. In progress (2026-10-02).** Decisions (Dean):
+   - **Both** a mute button (speaker icon) and a slider. On touch screens, mute only:
+     hardware buttons set the level, and iPhone Safari ignores `audio.volume`
+     entirely (only `muted` works). Detected by setting the volume and reading it
+     back, not by guessing from the browser name; the slider hides where it can't work.
+   - **In the now-playing bar only.** Tried first on the book page and the
+     featured book as well; two on one page was one too many (Dean), and the bar
+     shows on every page while a book is active, which is when volume matters.
+   - **One app-wide store** (`player/volume.ts`, `useSyncExternalStore`), not
+     per-player state, so every control shows and sets the same thing, an idle book's
+     control behaves like the live one's, and each new `Audio` (one per activation)
+     picks the level up. Files within a book reuse the element, so a file boundary
+     can't lose it.
+   - **Level remembered per browser** (like speed: one setting for every book, not
+     synced, since loudness belongs to the device). **Mute is not remembered:** a
+     tab that reloads silent looks broken.
+   - Bone, not red (red means position). Native range input for keyboard and screen
+     readers; dragging the slider while muted unmutes.
+   - Hand test: level holds across a file boundary, a book switch and a reload; a
+     reload is never muted; the phone shows only the mute button; 375 and 1024.
+
 ## Working notes
 
 - Dev needs three things running: `docker compose up -d` (Postgres),

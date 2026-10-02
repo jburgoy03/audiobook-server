@@ -4,6 +4,7 @@ import type { BookDetail } from '../api/types'
 import { verifySession } from '../auth/auth'
 import { progressStore } from './progress'
 import { deviceId, loadRate, saveRate } from './storage'
+import { canSetVolume, elementVolume, volumeStore } from './volume'
 import { chapterIndexAt, clampPosition, locate, totalDuration } from './timeline'
 
 const SAVE_INTERVAL_MS = 30_000
@@ -149,6 +150,16 @@ export function useBookPlayer(
     audio.playbackRate = audio.defaultPlaybackRate
     audioRef.current = audio
 
+    // Volume is app-wide (volume.ts): apply it now and follow it. Files within the
+    // book reuse this element, so a file boundary can't lose it.
+    const applyVolume = () => {
+      const { level, muted } = volumeStore.get()
+      if (canSetVolume) audio.volume = elementVolume(level)
+      audio.muted = muted
+    }
+    applyVolume()
+    const unsubscribeVolume = volumeStore.subscribe(applyVolume)
+
     const onLoadedMetadata = () => {
       if (pendingSeekRef.current !== null) {
         audio.currentTime = pendingSeekRef.current
@@ -228,6 +239,7 @@ export function useBookPlayer(
       audio.removeEventListener('waiting', onWaiting)
       audio.removeEventListener('playing', onPlaying)
       audio.removeEventListener('error', onError)
+      unsubscribeVolume()
       audio.pause()
       audio.removeAttribute('src')
       audio.load()

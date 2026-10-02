@@ -3,6 +3,7 @@ import { JumpPrompt } from '../player/JumpPrompt'
 import { useNowPlaying } from '../player/nowPlaying'
 import { formatTime } from '../player/timeline'
 import { Cover } from './Cover'
+import { VolumeControl } from './VolumeControl'
 import { PlayPauseIcon, SkipIcon } from './Icons'
 
 /**
@@ -68,7 +69,10 @@ export function NowPlayingBar() {
             </button>
           </div>
 
-          <span className="now-bar-time">{formatTime((p.total - p.position) / p.rate)} left</span>
+          <div className="now-bar-end">
+            <VolumeControl />
+            <span className="now-bar-time">{formatTime((p.total - p.position) / p.rate)} left</span>
+          </div>
         </div>
       </section>
     </>
