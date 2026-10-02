@@ -48,6 +48,7 @@ Why these choices:
 | `DB_NETWORK` | `audiobook_default` |
 | `TUNNEL_NETWORK` | `portfolio_portfolio-net` |
 | `SEED_USERNAME` / `SEED_PASSWORD` | Creates the account on first start, only if no user exists. Safe to remove afterwards. On a fresh install, `admin create-user <name> --admin` (below) does the same without a passphrase in `.env`. |
+| `GOOGLE_BOOKS_API_KEY` | Optional. Lets the admin page's blurb fetch ask Google Books (first, ahead of Open Library). Without it, Open Library only. A Google Cloud API key, "Public data", restricted to the Books API. Locally: user-secret `Blurbs:GoogleBooksApiKey`. |
 
 Editing without an editor (no arrow keys over some terminals): set values with
 `sed`, and the passphrase with `read -s` so it never shows or lands in history:
@@ -236,6 +237,53 @@ Over SSH on the server, one at a time:
 Nothing else is needed: no database edits, no restart. If `./AudiobookServer.Api` is
 ever missing from an image, `dotnet AudiobookServer.Api.dll admin …` is the same
 command.
+
+## The server's other open doors
+
+The audiobook stack has no inbound port: the tunnel dials out, the API is published
+on the Tailscale address only, and Postgres on `127.0.0.1`. The same machine runs
+other stacks, though, and their exposure was reviewed on 2026-10-02 (`sudo ss -tlnp`).
+
+**Accepted risk (Dean, 2026-10-02): Jellyfin's port 8096 is forwarded on the Spectrum
+gateway**, over plain HTTP, for one friend (`jdbmedia.duckdns.org`). Barely used, so
+the risk is known and judged minimal. What it means: sign-ins and session tokens cross
+the internet unencrypted; bots scan 8096 and try passwords; some Jellyfin endpoints
+answer without sign-in (item images and metadata by ID); and Jellyfin runs with
+`network_mode: host`, so a compromise would sit on the server's network next to
+Portainer. The real fix, if usage grows: share the server with the friend over
+Tailscale and remove the forward.
+
+Everything else listens on all interfaces but is LAN-only (not forwarded): SSH 22,
+Portainer 9000, qBittorrent 8080 and 6881 (via Gluetun), FlareSolverr 8191, Radarr
+7878, Sonarr 8989, Prowlarr 9696, Audiobookshelf 13378. Docker's published ports
+bypass `ufw`, so the router is the only boundary.
+
+**Open question: inbound IPv6.** The server has public IPv6 addresses
+(`2603:6010:…`), and every service above also listens on `[::]`. If the gateway lets
+inbound IPv6 through, they're on the internet with no forward at all. Test from
+outside (a phone on cellular, Wi-Fi off, after https://test-ipv6.com shows IPv6):
+`http://[2603:6010:b600:564::145c]:13378` should **not** load. If it loads, turn on the
+gateway's IPv6 firewall, or publish ports on IPv4 only (`"0.0.0.0:<port>:<port>"`).
+
+Hardening checklist (cheap, none done yet):
+
+- [ ] Run the IPv6 test above.
+- [ ] Router: port forwarding lists **8096 only**; **UPnP off**.
+- [ ] Jellyfin: media mounted **read-only** (`:ro`); strong, unique passwords on every
+      account; never sign in as admin from outside (use an ordinary account remotely);
+      keep it updated; lockout after failed sign-ins on (Dashboard → Users, per user);
+      drop `network_mode: host` if hardware transcoding still works with the device
+      passed through (`devices: /dev/dri`) and 8096 published normally.
+- [ ] Portainer (9000): strong password; it controls Docker, which means root on the
+      server. Better: publish it on the Tailscale address only, like the audiobook API.
+- [ ] FlareSolverr (8191): has no authentication. Only Prowlarr uses it, over the
+      stack's Docker network, so remove its published port.
+- [ ] qBittorrent 6881: unpublish (Mullvad has no port forwarding, so it receives
+      nothing useful there).
+- [ ] Radarr, Sonarr, Prowlarr: authentication on, and "Disabled for local addresses"
+      off.
+- [ ] SSH: `PasswordAuthentication no` in `sshd_config` (keys only; Tailscale SSH
+      covers remote access). Never forward 22.
 
 ## Still manual
 

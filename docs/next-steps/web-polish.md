@@ -112,12 +112,14 @@ fonts, `web/public/icons.svg` and `web/src/main.tsx.new` are all gone.
    pause and when replaced). The All books tile of the active book reads the live
    position (`LiveCover`), so it no longer lags or lacks a ribbon under 60s.
 
-1. **File-boundary gap.** Not measured yet. When a file ends, the next is loaded
-   from scratch (`useBookPlayer`: `onEnded` → `loadFile`). Measure the silence
-   first; if noticeable, preload the next file on a second hidden `Audio` in the
-   last ~30s and swap on `ended`, or warm the cache with a ranged `fetch` of its
-   first ~256 KB. The player now lives in `PlayerProvider`, so a second element
-   belongs there too.
+1. ~~**File-boundary gap.**~~ **Closed 2026-10-02, no change.** When a file ends, the
+   next is loaded from scratch (`useBookPlayer`: `onEnded` → `loadFile`). Measured by
+   ear (Dean): the pause is short and reads as the normal one between chapters, which
+   is where file boundaries fall in this library (The Name of the Wind's mp3s and Locke
+   Lamora's m4bs are one chapter per file; a single-file m4b has no boundary at all).
+   Preloading would only matter for a book split mid-chapter. If one turns up: a second
+   hidden `Audio` in `PlayerProvider` loading the next file in the last ~30 s, swapped
+   on `ended`.
 2. **Narrator tag.** Neither sample book has `composer` or `narrator`. Run
    `ffprobe -show_format` on a file of each and check `album_artist`, `performer`,
    `comment` before extending the precedence in `BookScanner`. Otherwise this waits
