@@ -4,9 +4,11 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using AudiobookServer.Core.Data;
 using AudiobookServer.Core.Entities;
+using AudiobookServer.Core.Metadata;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
@@ -116,8 +118,11 @@ public sealed class ApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("DataProtection__KeysDirectory", Path.Combine(_root, "keys"));
         Environment.SetEnvironmentVariable("Covers__Directory", CoversDirectory);
 
+        // The blurb catalogues are replaced: tests never reach the internet.
         Factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(b => b.UseEnvironment("Testing"));
+            .WithWebHostBuilder(b => b
+                .UseEnvironment("Testing")
+                .ConfigureTestServices(s => s.AddSingleton<IBlurbFetcher, FakeBlurbFetcher>()));
 
         // Starts the host, which runs the user seeder.
         _ = Factory.Server;
@@ -248,6 +253,22 @@ public sealed class ApiFixture : IAsyncLifetime
         var client = CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
         return client;
+    }
+}
+
+/// <summary>
+/// Stands in for Open Library and Google Books. A title starting "Blurbed" has a blurb,
+/// "Unreachable" fails as a network error would, anything else has none.
+/// </summary>
+public sealed class FakeBlurbFetcher : IBlurbFetcher
+{
+    public Task<Blurb?> FetchAsync(string title, string? author, CancellationToken ct = default)
+    {
+        if (title == "Unreachable")
+            throw new HttpRequestException("Simulated outage", null, System.Net.HttpStatusCode.ServiceUnavailable);
+        return Task.FromResult(title.StartsWith("Blurbed", StringComparison.Ordinal)
+            ? new Blurb($"A blurb for {title} by {author ?? "nobody"}, long enough to count.", "Test", title, author)
+            : null);
     }
 }
 

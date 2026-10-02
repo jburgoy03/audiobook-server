@@ -19,6 +19,8 @@ services:
       # Creates the account on first start, only if no user exists yet.
       Auth__SeedUser__Username: ${SEED_USERNAME:-}
       Auth__SeedUser__Password: ${SEED_PASSWORD:-}
+      # Optional: without it, blurbs come from Open Library only.
+      Blurbs__GoogleBooksApiKey: ${GOOGLE_BOOKS_API_KEY:-}
     volumes:
       # Read-only: the server never writes to the library. Mounted at the same
       # path as on the host, because Libraries.RootPath in the database already

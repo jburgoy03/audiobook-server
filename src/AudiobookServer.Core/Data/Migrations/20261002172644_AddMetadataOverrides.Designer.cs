@@ -3,6 +3,7 @@ using System;
 using AudiobookServer.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AudiobookServer.Core.Data.Migrations
 {
     [DbContext(typeof(AudiobookDbContext))]
-    partial class AudiobookDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261002172644_AddMetadataOverrides")]
+    partial class AddMetadataOverrides
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -99,10 +102,6 @@ namespace AudiobookServer.Core.Data.Migrations
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
-
-                    b.Property<string>("DescriptionSource")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
 
                     b.Property<double>("DurationSeconds")
                         .HasColumnType("double precision");

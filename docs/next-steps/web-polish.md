@@ -138,11 +138,20 @@ fonts, `web/public/icons.svg` and `web/src/main.tsx.new` are all gone.
 5. **Auto-scroll on tablet and phone.** The chapter list follows playback only on
    desktop. A "Jump to current chapter" control in the stacked layout would cover it.
 6. **Full visual pass at 768 and 375** in the new design. Checked at 1024 so far.
-7. **Metadata overrides.** Edit a book's title and author from the admin page, kept
-   across rescans (a separate override column, since a rescan rewrites the tag-derived
-   fields). Poor tags today: After the Quake (lowercase title; artist tag lists the
-   narrators), "The Will of the Many (Unabridged)", "Blind Willow" for Blind Willow,
-   Sleeping Woman. Overlaps with metadata enrichment (2g).
+7. ~~**Metadata overrides.**~~ **Done 2026-10-02.** Admin → **Books** (Dean's call: a
+   list to scan for bad titles, rather than an Edit link on the book page): a filter,
+   and an inline editor per book showing the scanned value under each field, with
+   "Use scanned". Columns `TitleOverride` / `AuthorOverride` (migration
+   `AddMetadataOverrides`), never written by the scanner; `GET /api/books` and
+   `/api/books/{id}` return the override when set (and sort by it).
+   `GET /api/admin/books`, `PUT /api/admin/books/{id}/metadata` (both fields sent; an
+   empty field, or one equal to the scanned value, stores no override, so it keeps
+   following rescans; the cost is you can't pin a value equal to today's scan, or an
+   empty author). Tests: the admin route table, `MetadataOverrideTests`,
+   `AdminBookTests` (survives a forced rescan of a real generated mp3, clearing
+   restores, listener sees it but gets 403, 404, 400). Not in the `admin` command.
+   Title only and author only: the narrator line wasn't part of it.
+
 8. **Light mode** was removed deliberately. If it comes back, it needs its own
    palette pass rather than inverted tokens.
 
@@ -166,6 +175,50 @@ fonts, `web/public/icons.svg` and `web/src/main.tsx.new` are all gone.
      readers; dragging the slider while muted unmutes.
    - Hand test: level holds across a file boundary, a book switch and a reload; a
      reload is never muted; the phone shows only the mute button; 375 and 1024.
+
+10. **Blurbs** (2026-10-02, with the overrides). Fetched automatically (Dean: no typing),
+    shown on the book page under the author lines, "From Open Library"/"From Google
+    Books" under it. Phones and tablets: a full-width row (the title column is half
+    width there), five lines with a fade and More. Desktop: the whole blurb, always
+    (Dean's call); the left column then scrolls with the page instead of sticking,
+    while the player column stays.
+    - Server: `BlurbFetcher` (Core/Metadata, typed `HttpClient`, 15 s timeout, a
+      User-Agent naming the site). **Google Books first** when a key is configured
+      (`Blurbs:GoogleBooksApiKey`: user-secrets locally, `GOOGLE_BOOKS_API_KEY` in the
+      server's `.env`): its descriptions are usually publisher copy, a real blurb.
+      Unquoted `intitle:` + `inauthor:<surname>`, then a plain `title author` query;
+      English editions first, no language filter (a quoted title with
+      `langRestrict=en` found nothing for Locke Lamora). Without a key Google isn't
+      asked: its shared anonymous quota answers 429 at once. Then **Open Library**,
+      same search as `fetch-covers.py`, up to 5 matching works; its descriptions are
+      volunteer-written and often encyclopedic (The Name of the Wind's read like
+      Wikipedia, which is why Google went first). Searches by the title and author
+      listeners see, so overrides first. Failures name the catalogue
+      ("Google Books: 429 TooManyRequests").
+    - `BlurbText` (pure, unit-tested): a record counts only if its title matches,
+      ignoring case, punctuation, "&" and a subtitle on either side ("Dune" is not
+      "Dune Messiah"); Open Library Markdown cleaned (links to text, `([source][1])`,
+      reference lines, `*italics*`, everything after a `----------` rule); Google HTML stripped;
+      under 40 characters is a stub, not a blurb. **Encyclopedia entries are rejected**
+      from either catalogue (Dean: blurbs only, no Wikipedia-style text), judged on the
+      first sentence: "written by", "also called/known as", "is a … novel … by", a
+      nationality before author/writer/novelist, "was published in/on/by". Heuristic:
+      a blurb opening that way is lost; an entry phrased otherwise gets through.
+    - Stored in `Book.Description` plus `DescriptionSource` (migration
+      `AddBlurbSource`); the scanner never writes either, so rescans keep them.
+    - `POST /api/admin/books/{id}/description/fetch` (one book per request, so a bulk
+      run never nears Cloudflare's 100 s; not found keeps the old blurb; 502 when a
+      catalogue can't be reached and the other found nothing),
+      `DELETE /api/admin/books/{id}/description`. Admin → Books: "Fetch missing
+      blurbs (n)" runs book by book, stops after 3 failures in a row, and lists the
+      books with none; each editor shows the blurb, what it matched, Fetch again,
+      Remove.
+    - Weak spots: the general query checks the title, not the author, so a common
+      title can match another author's book (the editor shows the matched record);
+      a removed blurb is fetched again by the next bulk run (no "rejected" flag);
+      translations get the work's description, which is usually the English one.
+    - Tests: the route table (403/401), `BlurbTextTests`, `AdminBookTests` with a fake
+      fetcher in `ApiFixture` (tests never reach the internet).
 
 ## Working notes
 

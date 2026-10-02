@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { api, HttpError, UnauthorizedError } from '../api/client'
-import type { AdminUser, Library, ScanReport, TemporaryPassword } from '../api/types'
+import type { AdminBook, AdminUser, Library, ScanReport, TemporaryPassword } from '../api/types'
 import { useAuth } from '../auth/auth'
 
 /**
- * Everything the admin does routinely: hand out accounts, and manage libraries.
+ * Everything the admin does routinely: hand out accounts, manage libraries, and
+ * correct books' titles and authors.
  * Rendered only for admins (see App), but that's convenience: every call here
  * goes to an endpoint that enforces the Admin policy itself.
  */
@@ -38,6 +39,7 @@ export function AdminPage() {
       <h1 className="admin-title">Admin</h1>
       <UsersSection libraries={libraries ?? []} />
       <LibrariesSection libraries={libraries} error={librariesError} refresh={refreshLibraries} />
+      <BooksSection libraries={libraries} />
     </div>
   )
 }
@@ -671,6 +673,387 @@ function AddLibraryForm({ onCancel, onAdded }: { onCancel: () => void; onAdded: 
         In a container, the folder must also be mounted (deploy/docker-compose.yml). Scan it once it’s added.
       </p>
     </form>
+  )
+}
+
+// ---------- Books ----------
+
+/**
+ * Fixing what the scanner got wrong (titles and authors from bad tags or folder
+ * names), and fetching blurbs. Overrides and blurbs live in columns the scanner
+ * never writes, so rescans keep them. The editor shows the scanned value under
+ * each field, so it's clear what's being replaced.
+ *
+ * Reloads when the libraries change (a scan, a library added), which is when the
+ * book list can change. A plain filter, because the point is to find one book.
+ */
+function BooksSection({ libraries }: { libraries: Library[] | null }) {
+  const [books, setBooks] = useState<AdminBook[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (libraries === null) return
+    const controller = new AbortController()
+    api
+      .adminBooks(controller.signal)
+      .then(setBooks)
+      .catch((e: unknown) => {
+        if (!controller.signal.aborted) setError(describe(e))
+      })
+    return () => controller.abort()
+  }, [libraries])
+
+  const replace = (saved: AdminBook) =>
+    setBooks((all) => all?.map((b) => (b.id === saved.id ? saved : b)) ?? null)
+
+  const needle = query.trim().toLocaleLowerCase()
+  const shown =
+    books?.filter(
+      (b) =>
+        !needle ||
+        [b.title, b.author, b.scannedTitle, b.scannedAuthor, b.relativePath].some((s) =>
+          s?.toLocaleLowerCase().includes(needle),
+        ),
+    ) ?? []
+  const multipleLibraries = (libraries?.length ?? 0) > 1
+
+  return (
+    <section className="admin-section" aria-labelledby="books-heading">
+      <div className="section-head">
+        <h2 id="books-heading">Books</h2>
+        {books && <span className="section-count">{books.length}</span>}
+      </div>
+
+      <div className="admin-add">
+        <label className="field">
+          <span>Find a book</span>
+          <input
+            type="search"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Title, author or folder"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+      </div>
+
+      {books && <BulkBlurbs books={books} onBook={replace} />}
+
+      {error && (
+        <p className="admin-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {books && shown.length === 0 && <p className="muted book-none">No books match.</p>}
+
+      {books && (
+        <ul className="admin-list">
+          {shown.map((book) => {
+            const editing = editingId === book.id
+            const edited = book.titleOverride !== null || book.authorOverride !== null
+            const meta = [book.author ?? 'no author']
+            if (multipleLibraries) meta.push(book.libraryName)
+            if (edited) meta.push('edited')
+            meta.push(book.descriptionSource ? `blurb from ${book.descriptionSource}` : 'no blurb')
+            return (
+              <li key={book.id} className="admin-row">
+                <div className="admin-row-text">
+                  <span className="admin-row-name">{book.title}</span>
+                  <span className="admin-row-meta muted">{meta.join(' · ')}</span>
+                  <span className="admin-row-path">{book.relativePath}</span>
+                </div>
+                <div className="admin-row-actions">
+                  <button
+                    type="button"
+                    className="pill"
+                    aria-expanded={editing}
+                    onClick={() => setEditingId(editing ? null : book.id)}
+                  >
+                    Edit
+                  </button>
+                </div>
+                {editing && (
+                  <BookEditor
+                    book={book}
+                    onCancel={() => setEditingId(null)}
+                    onChanged={replace}
+                    onSaved={(saved) => {
+                      replace(saved)
+                      setEditingId(null)
+                    }}
+                  />
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+type BulkState =
+  | { phase: 'idle' }
+  | { phase: 'running'; done: number; total: number; found: number }
+  | { phase: 'finished'; total: number; found: number; missing: string[]; failed: string[]; stopped: boolean }
+
+/** Stop after this many failures in a row: the catalogues are down, or rate-limiting us. */
+const MAX_FAILURES_IN_A_ROW = 3
+
+/**
+ * Fetches a blurb for every book that has none, one request per book, in order.
+ * One at a time is deliberate: it's gentle on Open Library, and no request comes
+ * near Cloudflare's 100-second limit. Leaving the page stops it after the current book.
+ */
+function BulkBlurbs({ books, onBook }: { books: AdminBook[]; onBook: (book: AdminBook) => void }) {
+  const [state, setState] = useState<BulkState>({ phase: 'idle' })
+  const stop = useRef(false)
+
+  useEffect(
+    () => () => {
+      stop.current = true
+    },
+    [],
+  )
+
+  const missing = books.filter((b) => !b.description)
+
+  const run = async () => {
+    const queue = [...missing]
+    stop.current = false
+    let found = 0
+    let failuresInARow = 0
+    const notFound: string[] = []
+    const failed: string[] = []
+
+    for (let i = 0; i < queue.length; i++) {
+      if (stop.current) break
+      setState({ phase: 'running', done: i, total: queue.length, found })
+      const book = queue[i]
+      try {
+        const result = await api.fetchBlurb(book.id)
+        onBook(result.book)
+        failuresInARow = 0
+        if (result.found) found++
+        else notFound.push(book.title)
+      } catch (e) {
+        if (e instanceof UnauthorizedError) return
+        failed.push(`${book.title} (${describe(e)})`)
+        if (++failuresInARow >= MAX_FAILURES_IN_A_ROW) {
+          stop.current = true
+        }
+      }
+    }
+
+    setState({
+      phase: 'finished',
+      total: queue.length,
+      found,
+      missing: notFound,
+      failed,
+      stopped: stop.current,
+    })
+  }
+
+  const running = state.phase === 'running'
+
+  return (
+    <div className="blurb-bulk">
+      <div className="admin-confirm-actions">
+        <button
+          type="button"
+          className="pill"
+          disabled={running || missing.length === 0}
+          onClick={() => void run()}
+        >
+          {missing.length === 0 ? 'Every book has a blurb' : `Fetch missing blurbs (${missing.length})`}
+        </button>
+        {running && (
+          <button type="button" className="pill pill-quiet" onClick={() => (stop.current = true)}>
+            Stop
+          </button>
+        )}
+      </div>
+      <p className="library-scan-note muted" role="status">
+        {state.phase === 'idle' &&
+          'From Open Library, then Google Books, by the title and author shown. Check them in each book’s editor.'}
+        {state.phase === 'running' && `Fetching ${state.done + 1} of ${state.total}… ${state.found} found so far.`}
+        {state.phase === 'finished' && describeBulk(state)}
+      </p>
+    </div>
+  )
+}
+
+function describeBulk(s: Extract<BulkState, { phase: 'finished' }>): string {
+  const parts = [`Found ${s.found} of ${s.total}.`]
+  if (s.missing.length > 0) parts.push(`No blurb anywhere for: ${s.missing.join('; ')}.`)
+  if (s.failed.length > 0) parts.push(`Couldn’t fetch: ${s.failed.join('; ')}.`)
+  if (s.stopped) parts.push('Stopped early; run it again later for the rest.')
+  return parts.join(' ')
+}
+
+/**
+ * Title and author, prefilled with what listeners see now. An empty field, or one
+ * set back to the scanned value, means no override: the server stores nothing and
+ * the scanned value shows again (and follows future rescans). The blurb's buttons
+ * act at once, apart from Save.
+ */
+function BookEditor({
+  book,
+  onCancel,
+  onChanged,
+  onSaved,
+}: {
+  book: AdminBook
+  onCancel: () => void
+  onChanged: (book: AdminBook) => void
+  onSaved: (saved: AdminBook) => void
+}) {
+  const [title, setTitle] = useState(book.title)
+  const [author, setAuthor] = useState(book.author ?? '')
+  const [busy, setBusy] = useState<null | 'save' | 'fetch' | 'remove'>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [blurbNote, setBlurbNote] = useState<string | null>(null)
+
+  const changed = title.trim() !== book.title || author.trim() !== (book.author ?? '')
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy('save')
+    setError(null)
+    try {
+      onSaved(await api.setBookMetadata(book.id, title, author))
+    } catch (err) {
+      setError(describe(err))
+      setBusy(null)
+    }
+  }
+
+  const blurb = async (action: 'fetch' | 'remove') => {
+    setBusy(action)
+    setError(null)
+    setBlurbNote(null)
+    try {
+      if (action === 'fetch') {
+        const result = await api.fetchBlurb(book.id)
+        onChanged(result.book)
+        setBlurbNote(
+          result.found
+            ? `Matched “${result.matchedTitle}”${result.matchedAuthor ? ` by ${result.matchedAuthor}` : ''}.`
+            : 'No catalogue has a blurb for this title and author.',
+        )
+      } else {
+        onChanged(await api.removeBlurb(book.id))
+      }
+    } catch (err) {
+      setError(describe(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <form className="admin-confirm book-editor" onSubmit={save} aria-label={`Edit ${book.title}`}>
+      <OverrideField
+        label="Title"
+        value={title}
+        scanned={book.scannedTitle}
+        maxLength={500}
+        disabled={busy !== null}
+        onChange={setTitle}
+      />
+      <OverrideField
+        label="Author"
+        value={author}
+        scanned={book.scannedAuthor}
+        maxLength={300}
+        disabled={busy !== null}
+        onChange={setAuthor}
+      />
+      <p className="access-note muted">Kept across rescans. Empty, or the scanned value, means no override.</p>
+
+      <div className="blurb-admin">
+        <span className="blurb-admin-label">
+          Blurb{book.descriptionSource && <span className="muted"> · from {book.descriptionSource}</span>}
+        </span>
+        {book.description ? (
+          <p className="blurb-admin-text">{book.description}</p>
+        ) : (
+          <p className="muted blurb-admin-none">None yet.</p>
+        )}
+        {blurbNote && <p className="muted blurb-admin-note">{blurbNote}</p>}
+        <div className="admin-confirm-actions">
+          <button type="button" className="pill" disabled={busy !== null || changed} onClick={() => void blurb('fetch')}>
+            {busy === 'fetch' ? 'Fetching…' : book.description ? 'Fetch again' : 'Fetch blurb'}
+          </button>
+          {book.description && (
+            <button type="button" className="pill" disabled={busy !== null} onClick={() => void blurb('remove')}>
+              {busy === 'remove' ? 'Removing…' : 'Remove blurb'}
+            </button>
+          )}
+        </div>
+        {changed && <p className="muted blurb-admin-note">Save the title first: the search uses it.</p>}
+      </div>
+
+      {error && (
+        <p className="admin-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="admin-confirm-actions">
+        <button type="submit" className="pill pill-solid" disabled={!changed || busy !== null}>
+          {busy === 'save' ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" className="pill pill-quiet" disabled={busy !== null} onClick={onCancel}>
+          {changed ? 'Cancel' : 'Close'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function OverrideField({
+  label,
+  value,
+  scanned,
+  maxLength,
+  disabled,
+  onChange,
+}: {
+  label: string
+  value: string
+  scanned: string | null
+  maxLength: number
+  disabled: boolean
+  onChange: (value: string) => void
+}) {
+  const differs = value.trim() !== '' && value.trim() !== (scanned ?? '')
+  return (
+    <div className="override-field">
+      <label className="field">
+        <span>{label}</span>
+        <input
+          value={value}
+          maxLength={maxLength}
+          spellCheck={false}
+          placeholder={scanned ?? 'None'}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </label>
+      <p className="override-scanned muted">
+        <span>Scanned: {scanned ? `“${scanned}”` : 'nothing'}</span>
+        {differs && scanned && (
+          <button type="button" className="pill pill-quiet" disabled={disabled} onClick={() => onChange(scanned)}>
+            Use scanned
+          </button>
+        )}
+      </p>
+    </div>
   )
 }
 

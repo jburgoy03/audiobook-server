@@ -16,12 +16,13 @@ public static class BookEndpoints
     {
         app.MapGet("/api/books", async (ClaimsPrincipal principal, AudiobookDbContext db, CancellationToken ct) =>
             await db.VisibleBooks(principal)
-                .OrderBy(b => b.Author).ThenBy(b => b.Title)
+                // An admin's override wins over the scanned value (COALESCE in SQL).
+                .OrderBy(b => b.AuthorOverride ?? b.Author).ThenBy(b => b.TitleOverride ?? b.Title)
                 .Select(b => new
                 {
                     b.Id,
-                    b.Title,
-                    b.Author,
+                    Title = b.TitleOverride ?? b.Title,
+                    Author = b.AuthorOverride ?? b.Author,
                     b.DurationSeconds,
                     HasCover = b.CoverPath != null,
                     Files = b.Files.Count,
@@ -38,11 +39,12 @@ public static class BookEndpoints
                 .Select(b => new
                 {
                     b.Id,
-                    b.Title,
+                    Title = b.TitleOverride ?? b.Title,
                     b.Subtitle,
-                    b.Author,
+                    Author = b.AuthorOverride ?? b.Author,
                     b.Narrator,
                     b.Description,
+                    b.DescriptionSource,
                     b.PublishedYear,
                     b.DurationSeconds,
                     HasCover = b.CoverPath != null,

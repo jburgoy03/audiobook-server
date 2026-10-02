@@ -50,6 +50,8 @@ export interface BookDetail {
   author: string | null
   narrator: string | null
   description: string | null
+  /** "Open Library" or "Google Books". */
+  descriptionSource: string | null
   publishedYear: number | null
   durationSeconds: number
   hasCover: boolean
@@ -80,6 +82,33 @@ export interface AdminUser {
   lastSeenAt: string | null
   /** Libraries granted beyond the public ones. Admins see everything regardless. */
   libraryIds: string[]
+}
+
+/** One row of GET /api/admin/books: what listeners see, and what the scanner read. */
+export interface AdminBook {
+  id: string
+  libraryName: string
+  relativePath: string
+  /** Shown everywhere: the override when set, otherwise the scanned value. */
+  title: string
+  author: string | null
+  scannedTitle: string
+  scannedAuthor: string | null
+  /** Null when there's no override. The scanner never writes these. */
+  titleOverride: string | null
+  authorOverride: string | null
+  /** Fetched from a catalogue on request; never written by a scan. */
+  description: string | null
+  descriptionSource: string | null
+}
+
+/** Response of POST /api/admin/books/{id}/description/fetch. Not found keeps any old blurb. */
+export interface FetchBlurbResult {
+  found: boolean
+  /** The catalogue record the blurb came from, for spotting a wrong match. */
+  matchedTitle: string | null
+  matchedAuthor: string | null
+  book: AdminBook
 }
 
 /** Returned once, by create and reset. Only the hash is stored on the server. */

@@ -1,6 +1,8 @@
 import type {
+  AdminBook,
   AdminUser,
   BookDetail,
+  FetchBlurbResult,
   BookSummary,
   CurrentUser,
   Library,
@@ -154,6 +156,19 @@ export const api = {
   setUserLibraries: async (id: string, libraryIds: string[]) => {
     await request(`/api/admin/users/${id}/libraries`, { method: 'PUT', body: { libraryIds } })
   },
+
+  // ---- Admin: books ----
+
+  adminBooks: (signal?: AbortSignal) => getJson<AdminBook[]>('/api/admin/books', signal),
+  /**
+   * Sends both fields as the editor holds them. Empty, or equal to the scanned
+   * value, means no override for that field.
+   */
+  setBookMetadata: (id: string, title: string, author: string) =>
+    postJson<AdminBook>(`/api/admin/books/${id}/metadata`, { title, author }, 'PUT'),
+  /** One book per call, so a bulk fetch never makes one long request. */
+  fetchBlurb: (id: string) => postJson<FetchBlurbResult>(`/api/admin/books/${id}/description/fetch`),
+  removeBlurb: (id: string) => postJson<AdminBook>(`/api/admin/books/${id}/description`, undefined, 'DELETE'),
 
   // ---- Admin: libraries ----
 

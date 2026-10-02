@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { api } from '../api/client'
 import type { BookDetail } from '../api/types'
+import { Blurb } from '../components/Blurb'
 import { Cover } from '../components/Cover'
 import { BackIcon } from '../components/Icons'
 import { Player } from '../player/Player'
@@ -55,6 +56,7 @@ function BookView({ id }: { id: string }) {
               {book.narrator && <p className="muted">Read by {book.narrator}</p>}
               {book.credit && <p className="muted">{book.credit}</p>}
             </div>
+            {book.description && <Blurb text={book.description} source={book.descriptionSource} />}
           </header>
           <div className="book-main">
             {/* The audio belongs to PlayerProvider; this is the book's controls,

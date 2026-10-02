@@ -5,6 +5,7 @@ using AudiobookServer.Api.Cli;
 using AudiobookServer.Api.Endpoints;
 using AudiobookServer.Core.Data;
 using AudiobookServer.Core.Media;
+using AudiobookServer.Core.Metadata;
 using AudiobookServer.Core.Scanning;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,16 @@ builder.Services.AddSingleton<ICoverStore>(_ => new FfmpegCoverStore(coverDirect
 builder.Services.AddSingleton<ILibraryWalker, LibraryWalker>();
 builder.Services.AddScoped<IBookScanner, BookScanner>();
 builder.Services.AddScoped<ILibraryScanService, LibraryScanService>();
+
+// Blurbs from Open Library and Google Books, fetched when the admin asks. Open
+// Library asks clients to identify themselves. Google Books only with a key
+// (Blurbs:GoogleBooksApiKey; user-secrets locally, .env on the server).
+builder.Services.AddSingleton(new BlurbSettings(builder.Configuration["Blurbs:GoogleBooksApiKey"]));
+builder.Services.AddHttpClient<IBlurbFetcher, BlurbFetcher>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("audiobook-server/1.0 (+https://audiobooks.deanburgoyne.dev)");
+});
 
 builder.Services.AddAudiobookAuth(builder.Configuration, builder.Environment);
 
@@ -109,6 +120,7 @@ app.MapAuthEndpoints();
 app.MapProgressEndpoints();
 app.MapLibraryEndpoints();
 app.MapAdminUserEndpoints();
+app.MapAdminBookEndpoints();
 app.MapBookEndpoints();
 
 // An unknown /api route is a 404, never the web client's index.html.

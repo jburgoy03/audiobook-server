@@ -43,6 +43,9 @@ public class AudiobookDbContext(DbContextOptions<AudiobookDbContext> options)
             e.Property(x => x.Subtitle).HasMaxLength(500);
             e.Property(x => x.Author).HasMaxLength(300);
             e.Property(x => x.Narrator).HasMaxLength(300);
+            e.Property(x => x.TitleOverride).HasMaxLength(500);
+            e.Property(x => x.AuthorOverride).HasMaxLength(300);
+            e.Property(x => x.DescriptionSource).HasMaxLength(50);
             e.Property(x => x.Isbn).HasMaxLength(20);
             e.Property(x => x.RelativePath).HasMaxLength(1000);
             e.Property(x => x.CoverPath).HasMaxLength(1000);
