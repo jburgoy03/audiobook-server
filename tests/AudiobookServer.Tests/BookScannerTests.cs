@@ -238,4 +238,24 @@ public class BookScannerTests
         var embedded = Assert.IsType<EmbeddedCover>(book.Cover);
         Assert.Equal(a.Path, embedded.AudioPath);
     }
+
+    [Theory]
+    [InlineData("Gentleman Bastard-The Lies of Locke Lamora", "The Lies of Locke Lamora")]
+    [InlineData("Through the Looking-glass and What Alice Found There", "Through the Looking-glass and What Alice Found There")]
+    [InlineData("Dune", "Dune")]
+    public async Task Series_prefix_is_stripped_but_a_hyphenated_word_is_not(string album, string expected)
+    {
+        var a = File("/library/book/01.mp3", 100, album: album);
+        var book = await ScanOneAsync(ScannerFor(a), "/library/book", a.Path);
+        Assert.Equal(expected, book.Title);
+    }
+
+    [Fact]
+    public async Task Known_limit_a_capitalised_hyphenated_word_is_still_taken_for_a_series()
+    {
+        // Pinned so the limit is visible, not because it's right. See CleanTitle.
+        var a = File("/library/book/01.mp3", 100, album: "Through the Looking-Glass");
+        var book = await ScanOneAsync(ScannerFor(a), "/library/book", a.Path);
+        Assert.Equal("Glass", book.Title);
+    }
 }

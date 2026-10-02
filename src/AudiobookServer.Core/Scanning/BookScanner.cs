@@ -193,7 +193,15 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         return int.TryParse(head, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : null;
     }
 
-    /// <summary>Strips a leading series name, as in "Gentleman Bastard-The Lies of Locke Lamora".</summary>
+    /// <summary>
+    /// Strips a leading series name, as in "Gentleman Bastard-The Lies of Locke Lamora".
+    ///
+    /// A heuristic. A hyphen followed by a lowercase letter is taken to be a compound
+    /// word ("Through the Looking-glass and What Alice Found There"), not a separator.
+    /// "Through the Looking-Glass" with a capital G is still mangled: from the string
+    /// alone it's indistinguishable from "Gentleman Bastard-The". Fixing that needs
+    /// another source (metadata enrichment), not a cleverer pattern.
+    /// </summary>
     private static string? CleanTitle(string? album)
     {
         if (string.IsNullOrWhiteSpace(album)) return null;
@@ -235,7 +243,7 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         catch { return DateTimeOffset.UtcNow; }
     }
 
-    [GeneratedRegex(@"^(?<series>[^-]{2,40})-(?<title>.+)$")]
+    [GeneratedRegex(@"^(?<series>[^-]{2,40})-(?<title>(?!\p{Ll}).+)$")]
     private static partial Regex SeriesPrefix();
 
     [GeneratedRegex(@"^(?<title>.+?)\s+by\s+(?<author>.+?)$", RegexOptions.IgnoreCase)]
