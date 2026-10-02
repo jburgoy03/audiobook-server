@@ -159,6 +159,14 @@ What the scanner expects:
   out backwards. To flip a batch of `Author - Title` folders:
   `for d in *' - '*; do mv -n -- "$d" "${d#* - } - ${d%% - *}"; done` (check the list first).
 - **A `cover.jpg`** in the folder wins whenever it's larger than the embedded art.
+  For books with no art, fetch one from Open Library, dry run first (it prints the
+  edition it matched; translated books often match the original-language edition):
+  `python3 scripts/fetch-covers.py /mnt/media/audiobooks --dry-run "Title - Author" …`,
+  then the same without `--dry-run`, then a plain scan. A folder named otherwise takes
+  a search override: `"Folder Name=Title|Author"`. A junk image in a folder (a
+  screenshot that wins by size) is taken out of the running by renaming it to a
+  non-image extension (`.jpg.bak`). Open Library's cover server returns the odd 502:
+  rerun, finished folders are skipped.
 - Files in one folder with different `album` tags are taken to be a collection and
   split into one book per album.
 

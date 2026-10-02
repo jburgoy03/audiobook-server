@@ -1,9 +1,16 @@
 # Next steps: web client polish
 
-Small, independent fixes to the web client in `web/`. Status as of 2026-10-01.
+Small, independent fixes to the web client in `web/`. Status as of 2026-10-02.
 
 Auth, the sign-in page, synced progress and the jump offer are covered in
 [`auth-sync-deploy.md`](auth-sync-deploy.md), not here.
+
+## Done (2026-10-02)
+
+- **Admin page** (`/admin`): Listeners and Libraries. See `admin-accounts.md`.
+- **Choose-your-passphrase page**, shown instead of the app while
+  `mustChangePassword`.
+- Masthead "Admin" link (`NavLink`, bone while on the page). Checked at 375.
 
 ## Done (2026-10-01)
 
@@ -81,6 +88,25 @@ fonts, `web/public/icons.svg` and `web/src/main.tsx.new` are all gone.
 
 ## Remaining
 
+0. **Continue listening ignores the book that's playing. Next session's first item.**
+   Reported 2026-10-02: start or resume a book, go back to the library, and Continue
+   listening doesn't show it (or features another book), while the now-playing bar
+   does.
+   - *Cause.* The section is built from the progress store's **saved** positions
+     (`LibraryPage` → `progressStore.resumePoint`), not the player. The player saves
+     every 30s and on pause (`useBookPlayer`, `SAVE_INTERVAL_MS`), and a book counts
+     as started only past 60s (`STARTED_AFTER_SECONDS`). A new book takes up to ~90s
+     of listening to appear; a resumed one is ordered by its last *save*, so another
+     book can stay featured. The bar reads the live player, hence the mismatch.
+   - *Fix.* The active book (`nowPlaying`) is always first in Continue listening while
+     there is one, playing or paused, regardless of the 60s threshold, with its live
+     position; the rest follow by last activity as now. `FeaturedBook` already goes
+     live through `useLivePlayer` once it's the featured book. Also check the
+     compact items' "left" times and the All books progress ribbons for the same lag
+     (they read saved positions too; probably acceptable, but say so).
+   - *Test by hand:* resume a book that isn't featured, back to the library: it's
+     featured at once, with the live chapter line. A brand-new book, 10s in: featured.
+
 1. **File-boundary gap.** Not measured yet. When a file ends, the next is loaded
    from scratch (`useBookPlayer`: `onEnded` → `loadFile`). Measure the silence
    first; if noticeable, preload the next file on a second hidden `Audio` in the
@@ -92,16 +118,24 @@ fonts, `web/public/icons.svg` and `web/src/main.tsx.new` are all gone.
    `comment` before extending the precedence in `BookScanner`. Otherwise this waits
    for metadata enrichment (2g).
 3. ~~**Folder cover images.**~~ **Done 2026-10-01** (scanner, `CoverSelector`). The
-   largest image wins, folder or embedded; LibriVox covers work. To fix Lord of the
-   Rings or The Name of the Wind's 175x175 art, put a `cover.jpg` in the book's
-   folder and rescan (an image newer than the last scan triggers it).
+   largest image wins, folder or embedded; LibriVox covers work. Missing covers are
+   fetched with `scripts/fetch-covers.py` (Open Library, 2026-10-02; see
+   `docs/deploy.md`); then a plain scan. Two fetched covers are small (Kafka on the
+   Shore 6 KB, Blind Willow 5 KB) and may look soft; Murakami's are the Japanese
+   editions' (Dean's choice). The Name of the Wind's 175x175 art still wants a
+   `cover.jpg`.
 4. **First-visit library. Now the priority item.** With nothing started (every new
    user of the public library), there is no featured book. Feature a suggestion or
    the most recently added book.
 5. **Auto-scroll on tablet and phone.** The chapter list follows playback only on
    desktop. A "Jump to current chapter" control in the stacked layout would cover it.
 6. **Full visual pass at 768 and 375** in the new design. Checked at 1024 so far.
-7. **Light mode** was removed deliberately. If it comes back, it needs its own
+7. **Metadata overrides.** Edit a book's title and author from the admin page, kept
+   across rescans (a separate override column, since a rescan rewrites the tag-derived
+   fields). Poor tags today: After the Quake (lowercase title; artist tag lists the
+   narrators), "The Will of the Many (Unabridged)", "Blind Willow" for Blind Willow,
+   Sleeping Woman. Overlaps with metadata enrichment (2g).
+8. **Light mode** was removed deliberately. If it comes back, it needs its own
    palette pass rather than inverted tokens.
 
 ## Working notes
