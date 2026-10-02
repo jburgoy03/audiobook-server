@@ -49,6 +49,17 @@ export function useNowPlaying() {
   return useSyncExternalStore(nowPlayingStore.subscribe, nowPlayingStore.get)
 }
 
+const getActiveBookId = () => current?.book.id ?? null
+
+/**
+ * Just the active book's id. The snapshot is a string, so a reader re-renders
+ * only when the active book changes, not on every time update. For pages that
+ * need to know which book is active but not where it is (the library).
+ */
+export function useActiveBookId(): string | null {
+  return useSyncExternalStore(nowPlayingStore.subscribe, getActiveBookId)
+}
+
 /** The live player for `bookId` if it's the active book, otherwise null. */
 export function useLivePlayer(bookId: string) {
   const now = useNowPlaying()
