@@ -2,6 +2,7 @@ package dev.deanburgoyne.audiobooks.progress
 
 import dev.deanburgoyne.audiobooks.api.AudiobookApi
 import dev.deanburgoyne.audiobooks.api.InMemorySessionStore
+import dev.deanburgoyne.audiobooks.api.Progress
 import dev.deanburgoyne.audiobooks.api.ProgressReport
 import dev.deanburgoyne.audiobooks.api.Session
 import dev.deanburgoyne.audiobooks.api.Tokens
@@ -59,7 +60,7 @@ private fun progress(position: Double, device: String, reportedAt: String = "202
 
 private var tick = 0
 private fun TestScope.sync(server: FakeServer, pending: PendingReports = InMemoryPendingReports()) =
-    ProgressSync(server.api(), Device(Me, "Pixel"), pending, now = { "2026-10-04T12:00:${(tick++ % 60).toString().padStart(2, '0')}Z" }, backgroundScope)
+    ProgressSync(server.api(), Device(Me, "Pixel"), pending, InMemoryPositionCache(), now = { "2026-10-04T12:00:${(tick++ % 60).toString().padStart(2, '0')}Z" }, backgroundScope)
 
 class ProgressSyncTest {
     @Test
@@ -158,5 +159,23 @@ class ProgressSyncTest {
         sync.flush()
 
         assertEquals(1, server.sent.size)
+    }
+
+    @Test
+    fun the_device_remembers_where_it_was_and_unsent_positions_beat_the_server() = runTest {
+        val server = FakeServer().apply { online = false }
+        val sync = sync(server)
+
+        sync.report("b1", 700.0)
+        sync.flush() // offline: still pending
+
+        // The library loads an older server position: the unsent one wins.
+        sync.rememberServer(listOf(Json.decodeFromString<Progress>(progress(100.0, "web"))))
+        assertEquals(700.0, sync.knownPositions()["b1"]?.positionSeconds)
+
+        server.online = true
+        sync.flush()
+        sync.rememberServer(listOf(Json.decodeFromString<Progress>(progress(900.0, "web"))))
+        assertEquals(900.0, sync.knownPositions()["b1"]?.positionSeconds)
     }
 }

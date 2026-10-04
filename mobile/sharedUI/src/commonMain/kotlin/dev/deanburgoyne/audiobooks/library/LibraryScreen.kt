@@ -17,6 +17,9 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -26,10 +29,15 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.deanburgoyne.audiobooks.api.BookSummary
+import dev.deanburgoyne.audiobooks.downloads.DownloadState
 import dev.deanburgoyne.audiobooks.ui.formatDuration
 import dev.deanburgoyne.audiobooks.ui.formatRemaining
 
@@ -41,12 +49,25 @@ fun LibraryScreen(
     onRefresh: () -> Unit,
     onOpen: (BookSummary) -> Unit,
     onSignOut: () -> Unit,
+    wifiOnly: Boolean,
+    onWifiOnlyChange: (Boolean) -> Unit,
 ) {
+    var menu by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Library") },
-                actions = { TextButton(onClick = onSignOut) { Text("Sign out") } },
+                actions = {
+                    TextButton(onClick = { menu = true }) { Text("Settings") }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Download on Wi-Fi only") },
+                            trailingIcon = { Checkbox(checked = wifiOnly, onCheckedChange = null) },
+                            onClick = { onWifiOnlyChange(!wifiOnly) },
+                        )
+                        DropdownMenuItem(text = { Text("Sign out") }, onClick = { menu = false; onSignOut() })
+                    }
+                },
             )
         },
     ) { padding ->
@@ -82,7 +103,7 @@ fun LibraryScreen(
                 }
 
                 items(state.books, key = { it.id }) { book ->
-                    BookTile(book, coverUrl(book), onClick = { onOpen(book) })
+                    BookTile(book, coverUrl(book), downloaded = state.downloads[book.id]?.state == DownloadState.Complete, onClick = { onOpen(book) })
                 }
 
                 if (!state.loading && state.error == null && state.books.isEmpty()) {
@@ -130,13 +151,13 @@ private fun ContinueListening(
 }
 
 @Composable
-private fun BookTile(book: BookSummary, coverUrl: String?, onClick: () -> Unit) {
+private fun BookTile(book: BookSummary, coverUrl: String?, downloaded: Boolean, onClick: () -> Unit) {
     Column(Modifier.clickable(onClick = onClick)) {
         Cover(coverUrl, book.title)
         Spacer(Modifier.height(6.dp))
         Text(book.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(
-            listOfNotNull(book.author, formatDuration(book.durationSeconds)).joinToString(" · "),
+            listOfNotNull(if (downloaded) "Downloaded" else null, book.author, formatDuration(book.durationSeconds)).joinToString(" · "),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

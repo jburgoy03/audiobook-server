@@ -18,3 +18,9 @@ fun formatDuration(seconds: Double): String {
 /** "3 h 20 m left", from a position on the book's timeline. */
 fun formatRemaining(durationSeconds: Double, positionSeconds: Double): String =
     formatDuration((durationSeconds - positionSeconds).coerceAtLeast(0.0)) + " left"
+
+/** "1.2 GB", "640 MB". Decimal units, as phones' storage settings show them. */
+fun formatBytes(bytes: Long): String {
+    val mb = bytes / 1_000_000.0
+    return if (mb >= 1000) "${(mb / 100).toLong() / 10.0} GB".replace(".0 GB", " GB") else "${mb.toLong()} MB"
+}

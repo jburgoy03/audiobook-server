@@ -181,5 +181,17 @@ grid exists → Android A5 downloads → … B4 when the iPhone app starts.
   Reports come from the playback service (alive while audio plays), queued offline
   (one per book, SharedPreferences; Room waits for downloads). Verified both ways
   against the web client.
+- **A5 — downloads: done 2026-10-04.** Room (KMP, 2.8.5, KSP 2.3.12) stores each book's
+  details as sent plus per-file completion; files in app-private storage. A WorkManager
+  foreground job per book, resuming with HTTP Range through the authorised client;
+  Wi-Fi only by default. Playback uses local files when complete and not stale
+  (`contentVersion`), streams otherwise; offline, a stale copy plays too. With no
+  server the app opens the library of downloads (the session check no longer blocks
+  it). Positions are cached on the device, and an unsent report beats an older server
+  value, so resume works offline.
+- **Lesson:** `async` directly in `viewModelScope` crashes the app on failure whatever
+  `await` is wrapped in; parallel calls go inside `coroutineScope { }`.
+- **Still to do:** ask for the notification permission (download progress is hidden
+  without it); storage use in settings; clear Coil's cover cache on sign-out.
 - **Open for the release build:** plain HTTP is refused outside debug. Self-hosters on
   Tailscale over HTTP would need it allowed (Jellyfin's app does). Decide then.

@@ -2,6 +2,8 @@ package dev.deanburgoyne.audiobooks.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
@@ -13,6 +15,8 @@ import androidx.media3.session.SessionToken
 import dev.deanburgoyne.audiobooks.api.AudiobookApi
 import dev.deanburgoyne.audiobooks.api.BookDetail
 import dev.deanburgoyne.audiobooks.api.Chapter
+import dev.deanburgoyne.audiobooks.downloads.Downloads
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
@@ -34,7 +38,11 @@ import kotlin.math.roundToLong
  *
  * All calls on the main thread, as MediaController requires.
  */
-class AndroidBookPlayer(context: Context, private val api: AudiobookApi) : BookPlayer {
+class AndroidBookPlayer(
+    private val context: Context,
+    private val api: AudiobookApi,
+    private val downloads: Downloads,
+) : BookPlayer {
     private val scope = MainScope()
     private val _state = MutableStateFlow<NowPlaying?>(null)
     override val state: StateFlow<NowPlaying?> = _state.asStateFlow()
@@ -78,7 +86,25 @@ class AndroidBookPlayer(context: Context, private val api: AudiobookApi) : BookP
         }
     }
 
-    override fun play(book: BookDetail, startAt: Double) = withController { c ->
+    /**
+     * Plays from the device when the book is downloaded and still matches the server,
+     * otherwise streams. Offline, a stale download plays too: better than nothing, and
+     * there's no server timeline for it to disagree with until the connection returns.
+     */
+    override fun play(book: BookDetail, startAt: Double) {
+        scope.launch {
+            val local = try {
+                downloads.playableFiles(book.id, offline = !isOnline())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            withController { c -> load(c, book, startAt, local.orEmpty()) }
+        }
+    }
+
+    private fun load(c: MediaController, book: BookDetail, startAt: Double, local: Map<Int, String>) {
         if (book.id != chaptersFor) {
             chapters = book.chapters
             chaptersFor = book.id
@@ -87,7 +113,7 @@ class AndroidBookPlayer(context: Context, private val api: AudiobookApi) : BookP
         val items = book.files.map { file ->
             MediaItem.Builder()
                 .setMediaId("${book.id}/${file.sequence}")
-                .setUri(api.streamUrl(book.id, file.sequence))
+                .setUri(local[file.sequence]?.let { Uri.fromFile(File(it)) } ?: Uri.parse(api.streamUrl(book.id, file.sequence)))
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(book.title)
@@ -236,6 +262,12 @@ class AndroidBookPlayer(context: Context, private val api: AudiobookApi) : BookP
                 chaptersFor = null // try again on the next publish
             }
         }
+    }
+
+    private fun isOnline(): Boolean {
+        val manager = context.getSystemService(ConnectivityManager::class.java) ?: return false
+        val capabilities = manager.getNetworkCapabilities(manager.activeNetwork) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     private fun withController(action: (MediaController) -> Unit) {

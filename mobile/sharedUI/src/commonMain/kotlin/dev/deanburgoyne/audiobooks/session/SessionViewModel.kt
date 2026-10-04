@@ -84,8 +84,18 @@ class SessionViewModel(
                         throw e
                     } catch (_: SessionExpiredException) {
                         toSignIn()
-                    } catch (e: Exception) {
-                        _screen.value = SessionScreen.Unreachable(session.serverUrl, describe(e))
+                    } catch (_: ApiException) {
+                        // The server answered, with an error: say so rather than guess.
+                        _screen.value = SessionScreen.Unreachable(session.serverUrl, "The server couldn't confirm your session.")
+                    } catch (_: Exception) {
+                        // No connection. The session is kept, so open the library: it
+                        // shows downloaded books and reconnects on refresh. Nothing is
+                        // trusted that the server hasn't already granted; every request
+                        // is still checked when it's back.
+                        _screen.value = SessionScreen.SignedIn(
+                            session.serverUrl,
+                            CurrentUser(session.username.orEmpty(), isAdmin = false, mustChangePassword = false),
+                        )
                     }
                 }
             }

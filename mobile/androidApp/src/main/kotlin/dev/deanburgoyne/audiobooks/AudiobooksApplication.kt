@@ -5,9 +5,14 @@ import java.time.Instant
 import dev.deanburgoyne.audiobooks.api.AndroidSessionStore
 import dev.deanburgoyne.audiobooks.api.AudiobookApi
 import dev.deanburgoyne.audiobooks.api.platformHttpEngine
+import dev.deanburgoyne.audiobooks.downloads.AndroidDownloadFiles
+import dev.deanburgoyne.audiobooks.downloads.Downloads
+import dev.deanburgoyne.audiobooks.downloads.WorkManagerDownloadScheduler
+import dev.deanburgoyne.audiobooks.downloads.downloadDatabase
 import dev.deanburgoyne.audiobooks.playback.AndroidBookPlayer
 import dev.deanburgoyne.audiobooks.playback.BookPlayer
 import dev.deanburgoyne.audiobooks.progress.AndroidPendingReports
+import dev.deanburgoyne.audiobooks.progress.AndroidPositionCache
 import dev.deanburgoyne.audiobooks.progress.ProgressSync
 import dev.deanburgoyne.audiobooks.progress.androidDevice
 import kotlinx.coroutines.MainScope
@@ -29,7 +34,7 @@ class AudiobooksApplication : Application() {
      * offer). Both run in this process, so one instance is the single source of truth.
      */
     val progress: ProgressSync by lazy {
-        ProgressSync(api, androidDevice(this), AndroidPendingReports(this), now = { Instant.now().toString() }, scope)
+        ProgressSync(api, androidDevice(this), AndroidPendingReports(this), AndroidPositionCache(this), now = { Instant.now().toString() }, scope)
     }
 
     override fun onCreate() {
@@ -38,6 +43,28 @@ class AudiobooksApplication : Application() {
         scope.launch { progress.flush() }
     }
 
+    val downloadFiles by lazy { AndroidDownloadFiles(this) }
+
+    val downloads: Downloads by lazy {
+        Downloads(
+            dao = downloadDatabase(this).downloads(),
+            files = downloadFiles,
+            scheduler = WorkManagerDownloadScheduler(this, wifiOnly = { settings.getBoolean(KEY_WIFI_ONLY, true) }),
+            nowMillis = System::currentTimeMillis,
+        )
+    }
+
+    private val settings by lazy { getSharedPreferences("settings", MODE_PRIVATE) }
+
+    /** Downloads wait for Wi-Fi unless told otherwise: a 600 MB book shouldn't surprise a data plan. */
+    var downloadOnWifiOnly: Boolean
+        get() = settings.getBoolean(KEY_WIFI_ONLY, true)
+        set(value) = settings.edit().putBoolean(KEY_WIFI_ONLY, value).apply()
+
     /** Connects to the playback service on first use (the UI's first frame). */
-    val player: BookPlayer by lazy { AndroidBookPlayer(this, api) }
+    val player: BookPlayer by lazy { AndroidBookPlayer(this, api, downloads) }
+
+    private companion object {
+        const val KEY_WIFI_ONLY = "downloadOnWifiOnly"
+    }
 }

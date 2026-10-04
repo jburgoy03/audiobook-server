@@ -14,7 +14,12 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import dev.deanburgoyne.audiobooks.api.AudiobookApi
+import dev.deanburgoyne.audiobooks.downloads.DownloadSettings
+import dev.deanburgoyne.audiobooks.downloads.Downloads
+import kotlinx.coroutines.launch
 import dev.deanburgoyne.audiobooks.player.NowPlayingBar
 import dev.deanburgoyne.audiobooks.playback.BookPlayer
 import dev.deanburgoyne.audiobooks.player.JumpOfferCard
@@ -27,8 +32,17 @@ import dev.deanburgoyne.audiobooks.ui.SystemBackHandler
  * open book's ID is saved state, so rotation and process death return to it.
  */
 @Composable
-fun LibraryHost(api: AudiobookApi, player: BookPlayer, progress: ProgressSync, onSignOut: () -> Unit) {
-    val library = viewModel { LibraryViewModel(api, progress) }
+fun LibraryHost(
+    api: AudiobookApi,
+    player: BookPlayer,
+    progress: ProgressSync,
+    downloads: Downloads,
+    downloadSettings: DownloadSettings,
+    onSignOut: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var wifiOnly by remember { mutableStateOf(downloadSettings.wifiOnly) }
+    val library = viewModel { LibraryViewModel(api, progress, downloads) }
     val state by library.state.collectAsState()
     var openBookId by rememberSaveable { mutableStateOf<String?>(null) }
     var playerOpen by rememberSaveable { mutableStateOf(false) }
@@ -71,11 +85,16 @@ fun LibraryHost(api: AudiobookApi, player: BookPlayer, progress: ProgressSync, o
                     onRefresh = library::refresh,
                     onOpen = { openBookId = it.id },
                     onSignOut = onSignOut,
+                    wifiOnly = wifiOnly,
+                    onWifiOnlyChange = {
+                        wifiOnly = it
+                        downloadSettings.wifiOnly = it
+                    },
                 )
             } else {
                 SystemBackHandler { openBookId = null }
                 // Keyed by book, so opening another book gets a fresh view model.
-                val book = viewModel(key = "book-$bookId") { BookViewModel(api, bookId) }
+                val book = viewModel(key = "book-$bookId") { BookViewModel(api, bookId, downloads) }
                 val bookState by book.state.collectAsState()
                 BookScreen(
                     state = bookState,
@@ -86,6 +105,11 @@ fun LibraryHost(api: AudiobookApi, player: BookPlayer, progress: ProgressSync, o
                     onRetry = book::load,
                     onPlay = player::play,
                     onToggle = player::togglePlayPause,
+                    download = state.downloads[bookId],
+                    wifiOnly = wifiOnly,
+                    onDownload = { scope.launch { downloads.start(it) } },
+                    onRetryDownload = { scope.launch { downloads.retry(bookId) } },
+                    onRemoveDownload = { scope.launch { downloads.remove(bookId) } },
                 )
             }
         }

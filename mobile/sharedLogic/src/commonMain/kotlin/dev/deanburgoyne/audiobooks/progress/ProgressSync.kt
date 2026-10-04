@@ -37,6 +37,25 @@ interface PendingReports {
     fun remove(report: ProgressReport)
 }
 
+/** The last position this device knows for a book, whoever reported it. */
+@kotlinx.serialization.Serializable
+data class KnownPosition(val positionSeconds: Double, val isFinished: Boolean)
+
+/**
+ * Positions kept on the device, so resuming doesn't depend on reaching the server:
+ * offline, or before a queued report has been sent, this is where the listener was.
+ */
+interface PositionCache {
+    fun all(): Map<String, KnownPosition>
+    fun put(bookId: String, position: KnownPosition)
+}
+
+class InMemoryPositionCache : PositionCache {
+    private val positions = mutableMapOf<String, KnownPosition>()
+    override fun all() = positions.toMap()
+    override fun put(bookId: String, position: KnownPosition) { positions[bookId] = position }
+}
+
 class InMemoryPendingReports : PendingReports {
     private val byBook = linkedMapOf<String, ProgressReport>()
     override fun all() = byBook.values.toList()
@@ -66,6 +85,7 @@ class ProgressSync(
     private val api: AudiobookApi,
     private val device: Device,
     private val pending: PendingReports,
+    private val positions: PositionCache,
     private val now: () -> String,
     private val scope: CoroutineScope,
 ) {
@@ -106,6 +126,7 @@ class ProgressSync(
         val last = lastReported
         if (last != null && abs(last.first - positionSeconds) < 0.5 && last.second == isFinished) return
         lastReported = positionSeconds to isFinished
+        positions.put(bookId, KnownPosition(positionSeconds, isFinished))
 
         pending.put(
             ProgressReport(
@@ -120,6 +141,21 @@ class ProgressSync(
         )
         scope.launch { flush() }
     }
+
+    /**
+     * The server's positions, as the library just loaded them. A book with a report
+     * still waiting to be sent keeps this device's position: the server's is older.
+     */
+    fun rememberServer(progress: List<Progress>) {
+        val unsent = pending.all().map { it.bookId }.toSet()
+        progress.filter { it.bookId !in unsent }.forEach(::remember)
+    }
+
+    /** Where this device last knew each book to be. */
+    fun knownPositions(): Map<String, KnownPosition> = positions.all()
+
+    private fun remember(progress: Progress) =
+        positions.put(progress.bookId, KnownPosition(progress.positionSeconds, progress.isFinished))
 
     /** The listener chose the other device's position. Returns it, to seek there. */
     fun acceptOffer(): JumpOffer? {
@@ -161,7 +197,10 @@ class ProgressSync(
             }
 
             pending.remove(report)
-            if (result.accepted) _saved.tryEmit(result.progress)
+            if (result.accepted) {
+                remember(result.progress)
+                _saved.tryEmit(result.progress)
+            }
             if (!result.accepted && report.bookId == bookId) {
                 considerOffer(report.bookId, result.progress, report.positionSeconds)
             }

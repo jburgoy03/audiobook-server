@@ -47,3 +47,17 @@ fun androidDevice(context: Context): Device {
         ?: "${Build.MANUFACTURER} ${Build.MODEL}"
     return Device(id, name)
 }
+
+/** Known positions in SharedPreferences, one small JSON entry per book. */
+class AndroidPositionCache(context: Context) : PositionCache {
+    private val prefs = context.getSharedPreferences("known-positions", Context.MODE_PRIVATE)
+
+    override fun all(): Map<String, KnownPosition> =
+        prefs.all.mapNotNull { (bookId, json) ->
+            (json as? String)?.let { runCatching { bookId to ApiJson.decodeFromString<KnownPosition>(it) }.getOrNull() }
+        }.toMap()
+
+    override fun put(bookId: String, position: KnownPosition) {
+        prefs.edit().putString(bookId, ApiJson.encodeToString(position)).apply()
+    }
+}

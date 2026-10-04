@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.deanburgoyne.audiobooks.api.BookDetail
 import dev.deanburgoyne.audiobooks.api.Progress
+import dev.deanburgoyne.audiobooks.downloads.DownloadedBook
 import dev.deanburgoyne.audiobooks.playback.NowPlaying
 import dev.deanburgoyne.audiobooks.ui.formatDuration
 import dev.deanburgoyne.audiobooks.ui.formatRemaining
@@ -47,6 +48,11 @@ fun BookScreen(
     onRetry: () -> Unit,
     onPlay: (BookDetail, startAt: Double) -> Unit,
     onToggle: () -> Unit,
+    download: DownloadedBook?,
+    wifiOnly: Boolean,
+    onDownload: (BookDetail) -> Unit,
+    onRetryDownload: () -> Unit,
+    onRemoveDownload: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -64,7 +70,17 @@ fun BookScreen(
                     Text(state.message, color = MaterialTheme.colorScheme.error)
                     TextButton(onClick = onRetry) { Text("Try again") }
                 }
-                is BookState.Loaded -> BookDetails(state.book, progress, nowPlaying?.takeIf { it.bookId == state.book.id }, coverUrl(state.book), onPlay, onToggle)
+                is BookState.Loaded -> BookDetails(state.book, progress, nowPlaying?.takeIf { it.bookId == state.book.id }, coverUrl(state.book), onPlay, onToggle) {
+                    DownloadSection(
+                        book = state.book,
+                        download = download,
+                        wifiOnly = wifiOnly,
+                        offline = state.offline,
+                        onDownload = { onDownload(state.book) },
+                        onRetry = onRetryDownload,
+                        onRemove = onRemoveDownload,
+                    )
+                }
             }
         }
     }
@@ -78,6 +94,7 @@ private fun BookDetails(
     coverUrl: String?,
     onPlay: (BookDetail, Double) -> Unit,
     onToggle: () -> Unit,
+    downloadSection: @Composable () -> Unit,
 ) {
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
@@ -127,6 +144,8 @@ private fun BookDetails(
                 )
             }
         }
+
+        item { downloadSection() }
 
         book.description?.let { description ->
             item {
