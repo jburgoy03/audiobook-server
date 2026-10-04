@@ -158,12 +158,3 @@ fun ChangePasswordScreen(
         TextButton(onClick = onSignOut) { Text("Sign out") }
     }
 }
-
-/** A placeholder until the library screen (A2) replaces it. */
-@Composable
-fun SignedInScreen(screen: SessionScreen.SignedIn, onSignOut: () -> Unit) =
-    Form("Signed in", screen.serverUrl) {
-        Text("as ${screen.user.username}${if (screen.user.isAdmin) " (admin)" else ""}")
-        Text("The library comes next.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = onSignOut) { Text("Sign out") }
-    }

@@ -4,19 +4,19 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.request.HttpRequestBuilder
-import io.ktor.client.request.bearerAuth
+import io.ktor.client.plugins.HttpSend
+import io.ktor.client.plugins.plugin
 import io.ktor.client.request.get
 import io.ktor.client.request.post
-import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
-import io.ktor.http.HttpMethod
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.util.AttributeKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -61,9 +61,13 @@ internal val ApiJson = Json {
  * requests hit a 401 at once, one refreshes and the rest reuse its result, so a burst
  * of requests after an hour asleep costs one refresh, not one each.
  *
+ * That rule lives in an interceptor on [httpClient], not in each call, so anything
+ * else using the client (the image loader fetching covers) gets it too. The token is
+ * attached only to requests for the signed-in server's own URLs: it can't leak to
+ * another host whatever URL a caller passes.
+ *
  * Written by hand rather than with Ktor's Auth plugin, whose refresh is triggered by a
- * WWW-Authenticate challenge this server's bearer handler doesn't send; doing it here
- * keeps the rule ("401 → refresh once → retry once") visible and testable.
+ * WWW-Authenticate challenge this server's bearer handler doesn't send.
  */
 class AudiobookApi(
     engine: HttpClientEngine,
@@ -75,6 +79,9 @@ class AudiobookApi(
         expectSuccess = false
     }
 
+    /** For other clients of the server (the image loader). Carries the auth interceptor. */
+    val httpClient: HttpClient get() = http
+
     private val refreshLock = Mutex()
 
     private val _sessionEnded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -84,12 +91,29 @@ class AudiobookApi(
 
     val session: Session? get() = store.load()
 
+    init {
+        http.plugin(HttpSend).intercept { request ->
+            val session = store.load()
+            val ownServer = session != null && request.url.buildString().startsWith(session.serverUrl + "/")
+            if (request.attributes.contains(Anonymous) || !ownServer) return@intercept execute(request)
+
+            val sent = session!!.tokens ?: throw SessionExpiredException()
+            request.headers[HttpHeaders.Authorization] = "Bearer ${sent.accessToken}"
+            val first = execute(request)
+            if (first.response.status != HttpStatusCode.Unauthorized) return@intercept first
+
+            val fresh = refresh(stale = sent)
+            request.headers[HttpHeaders.Authorization] = "Bearer ${fresh.accessToken}"
+            execute(request)
+        }
+    }
+
     /** Is there an AudiobookServer at [input], and does this app speak its API? */
     suspend fun probe(input: String): ProbeResult {
         val serverUrl = normalizeServerUrl(input) ?: return ProbeResult.InvalidUrl
 
         val response = try {
-            http.get("$serverUrl/api/server-info")
+            http.get("$serverUrl/api/server-info") { attributes.put(Anonymous, Unit) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -116,6 +140,7 @@ class AudiobookApi(
     suspend fun signIn(serverUrl: String, username: String, password: String): CurrentUser {
         // No ?useCookies: without it the server answers with tokens in the body.
         val response = http.post("$serverUrl/api/auth/login") {
+            attributes.put(Anonymous, Unit)
             contentType(ContentType.Application.Json)
             setBody(LoginRequest(username, password))
         }
@@ -127,8 +152,7 @@ class AudiobookApi(
         return me()
     }
 
-    suspend fun me(): CurrentUser =
-        authorized { get("auth/me") }.throwIfError().body()
+    suspend fun me(): CurrentUser = http.get(api("auth/me")).throwIfError().body()
 
     /**
      * Changes the passphrase, then signs in again with it. The change revokes every
@@ -140,8 +164,9 @@ class AudiobookApi(
         val session = store.load() ?: throw SessionExpiredException()
         val username = session.username ?: throw SessionExpiredException()
 
-        authorized {
-            post("auth/change-password") { setBody(ChangePasswordRequest(currentPassword, newPassword)) }
+        http.post(api("auth/change-password")) {
+            contentType(ContentType.Application.Json)
+            setBody(ChangePasswordRequest(currentPassword, newPassword))
         }.throwIfError()
 
         return signIn(session.serverUrl, username, newPassword)
@@ -152,19 +177,29 @@ class AudiobookApi(
         store.load()?.let { store.save(it.copy(tokens = null)) }
     }
 
-    /**
-     * Runs [request] with the access token; on a 401, refreshes once and runs it again.
-     * [request] gets a builder whose paths are relative to /api/.
-     */
-    private suspend fun authorized(request: suspend AuthorizedRequests.() -> HttpResponse): HttpResponse {
-        val sent = store.load()?.tokens ?: throw SessionExpiredException()
+    /** Every book the user can see, by author then title. */
+    suspend fun books(): List<BookSummary> = http.get(api("books")).throwIfError().body()
 
-        val first = AuthorizedRequests(sent.accessToken).request()
-        if (first.status != HttpStatusCode.Unauthorized) return first
-
-        val fresh = refresh(stale = sent)
-        return AuthorizedRequests(fresh.accessToken).request()
+    /** One book with its files and chapters; null if it's gone (or not visible to this user). */
+    suspend fun book(id: String): BookDetail? {
+        val response = http.get(api("books/$id"))
+        if (response.status == HttpStatusCode.NotFound) return null
+        return response.throwIfError().body()
     }
+
+    /** The user's position in every book they've started, most recent first. */
+    suspend fun progress(): List<Progress> = http.get(api("progress")).throwIfError().body()
+
+    /**
+     * The cover's URL, for the image loader (which fetches through [httpClient], so it
+     * is authorised). [size] is the longest side in pixels once the server supports
+     * thumbnails; until then the server ignores it and sends the original.
+     */
+    fun coverUrl(bookId: String, size: Int? = null): String =
+        api("books/$bookId/cover") + (size?.let { "?size=$it" } ?: "")
+
+    private fun api(path: String): String =
+        "${(store.load() ?: throw SessionExpiredException()).serverUrl}/api/$path"
 
     private suspend fun refresh(stale: Tokens): Tokens = refreshLock.withLock {
         val session = store.load()
@@ -174,6 +209,7 @@ class AudiobookApi(
         if (current != stale) return current
 
         val response = http.post("${session.serverUrl}/api/auth/refresh") {
+            attributes.put(Anonymous, Unit)
             contentType(ContentType.Application.Json)
             setBody(RefreshRequest(current.refreshToken))
         }
@@ -190,23 +226,6 @@ class AudiobookApi(
         tokens
     }
 
-    private inner class AuthorizedRequests(private val accessToken: String) {
-        private val base get() = (store.load() ?: throw SessionExpiredException()).serverUrl
-
-        suspend fun get(path: String, block: HttpRequestBuilder.() -> Unit = {}): HttpResponse =
-            send(HttpMethod.Get, path, block)
-
-        suspend fun post(path: String, block: HttpRequestBuilder.() -> Unit = {}): HttpResponse =
-            send(HttpMethod.Post, path) { contentType(ContentType.Application.Json); block() }
-
-        private suspend fun send(method: HttpMethod, path: String, block: HttpRequestBuilder.() -> Unit) =
-            http.request("$base/api/$path") {
-                this.method = method
-                bearerAuth(accessToken)
-                block()
-            }
-    }
-
     private suspend fun HttpResponse.throwIfError(): HttpResponse {
         if (status.isSuccess()) return this
         val problem = try { body<Problem>() } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
@@ -214,4 +233,9 @@ class AudiobookApi(
     }
 
     private fun AccessTokenResponse.toTokens() = Tokens(accessToken, refreshToken)
+
+    private companion object {
+        /** Marks requests that must go without a token: the probe, sign-in, refresh. */
+        val Anonymous = AttributeKey<Unit>("Anonymous")
+    }
 }

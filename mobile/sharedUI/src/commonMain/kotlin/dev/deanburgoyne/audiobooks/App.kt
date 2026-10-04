@@ -7,7 +7,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.setSingletonImageLoaderFactory
+import coil3.ImageLoader
+import coil3.network.ktor3.KtorNetworkFetcherFactory
 import dev.deanburgoyne.audiobooks.api.AudiobookApi
+import dev.deanburgoyne.audiobooks.library.LibraryHost
 import dev.deanburgoyne.audiobooks.session.ChangePasswordScreen
 import dev.deanburgoyne.audiobooks.session.ChooseServerScreen
 import dev.deanburgoyne.audiobooks.session.LocalNetworkPermission
@@ -15,13 +19,11 @@ import dev.deanburgoyne.audiobooks.session.NoLocalNetworkPermission
 import dev.deanburgoyne.audiobooks.session.SessionScreen
 import dev.deanburgoyne.audiobooks.session.SessionViewModel
 import dev.deanburgoyne.audiobooks.session.SignInScreen
-import dev.deanburgoyne.audiobooks.session.SignedInScreen
 import dev.deanburgoyne.audiobooks.session.StartingScreen
 import dev.deanburgoyne.audiobooks.session.UnreachableScreen
 
 /**
- * The app's root. A plain `when` over the session state stands in for navigation
- * until there are screens to navigate between (the library, a book, the player).
+ * The app's root: the session decides between the sign-in flow and the library.
  */
 @Composable
 fun App(
@@ -31,6 +33,15 @@ fun App(
     // only a check (application context), never the activity's permission launcher.
     localNetworkGranted: () -> Boolean = { true },
 ) {
+    // Covers load through the API's own client, so they carry the bearer token (and
+    // refresh it on a 401) like every other request. Coil keeps them in its disk cache
+    // by URL regardless of Cache-Control, which suits covers: they rarely change.
+    setSingletonImageLoaderFactory { context ->
+        ImageLoader.Builder(context)
+            .components { add(KtorNetworkFetcherFactory(httpClient = api.httpClient)) }
+            .build()
+    }
+
     val session = viewModel { SessionViewModel(api, localNetworkGranted) }
     val screen by session.screen.collectAsState()
 
@@ -49,7 +60,7 @@ fun App(
                 is SessionScreen.ChooseServer -> ChooseServerScreen(s, onSubmit = session::submitServer)
                 is SessionScreen.SignIn -> SignInScreen(s, onSubmit = session::signIn, onChangeServer = session::chooseServer)
                 is SessionScreen.ChangePassword -> ChangePasswordScreen(s, onSubmit = session::changePassword, onSignOut = session::signOut)
-                is SessionScreen.SignedIn -> SignedInScreen(s, onSignOut = session::signOut)
+                is SessionScreen.SignedIn -> LibraryHost(api, onSignOut = session::signOut)
             }
         }
     }

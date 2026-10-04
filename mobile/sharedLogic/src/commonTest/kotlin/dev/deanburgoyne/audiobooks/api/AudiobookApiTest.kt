@@ -7,6 +7,7 @@ import io.ktor.client.engine.mock.respondError
 import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
+import io.ktor.client.request.get
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
@@ -173,5 +174,41 @@ class SessionTest {
 
         assertTrue(signedInWith!!.contains("a brand new passphrase"))
         assertEquals("access-3", store.load()?.tokens?.accessToken)
+    }
+}
+
+class LibraryTest {
+    @Test
+    fun the_token_goes_only_to_the_signed_in_server() = runTest {
+        var leaked: String? = "not called"
+        val api = api(signedIn()) { request ->
+            leaked = request.headers[HttpHeaders.Authorization]
+            json("[]")
+        }
+
+        api.httpClient.get("https://elsewhere.test/image.jpg")
+        assertNull(leaked)
+
+        api.books()
+        assertEquals("Bearer access-1", leaked)
+    }
+
+    @Test
+    fun books_and_details_parse_and_a_missing_book_is_null() = runTest {
+        val api = api(signedIn()) { request ->
+            when (request.url.encodedPath) {
+                "/api/books" -> json("""[{"id":"b1","title":"Dune","author":"Frank Herbert","durationSeconds":75600.5,
+                    "hasCover":true,"files":2,"chapters":48,"addedAt":"2026-10-04T12:00:00+00:00","contentVersion":"abc"}]""")
+                "/api/books/b1" -> json("""{"id":"b1","title":"Dune","durationSeconds":75600.5,"hasCover":true,
+                    "files":[{"sequence":0,"startOffsetSeconds":0,"durationSeconds":37800,"mimeType":"audio/mpeg","sizeBytes":1000}],
+                    "chapters":[{"sequence":0,"title":"Book One","startOffsetSeconds":0,"endOffsetSeconds":3600}]}""")
+                else -> respondError(HttpStatusCode.NotFound)
+            }
+        }
+
+        assertEquals("Frank Herbert", api.books().single().author)
+        assertEquals("Book One", api.book("b1")!!.chapters.single().title)
+        assertNull(api.book("gone"))
+        assertEquals("$Server/api/books/b1/cover?size=640", api.coverUrl("b1", 640))
     }
 }
