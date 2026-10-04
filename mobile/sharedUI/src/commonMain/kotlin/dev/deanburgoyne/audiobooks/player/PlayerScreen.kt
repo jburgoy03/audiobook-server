@@ -1,27 +1,27 @@
 package dev.deanburgoyne.audiobooks.player
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,141 +29,160 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.deanburgoyne.audiobooks.library.Cover
 import dev.deanburgoyne.audiobooks.playback.BookPlayer
 import dev.deanburgoyne.audiobooks.playback.NowPlaying
 import dev.deanburgoyne.audiobooks.playback.SleepTimer
 import dev.deanburgoyne.audiobooks.playback.formatClock
+import dev.deanburgoyne.audiobooks.ui.ControlButton
+import dev.deanburgoyne.audiobooks.ui.Palette
 import dev.deanburgoyne.audiobooks.ui.PlayerIcons
+import dev.deanburgoyne.audiobooks.ui.SkipIcon
+import dev.deanburgoyne.audiobooks.ui.Timeline
 import dev.deanburgoyne.audiobooks.ui.formatRemaining
-import kotlin.math.roundToInt
+import dev.deanburgoyne.audiobooks.ui.secondaryItalic
 
 private val Speeds = listOf(0.8f, 1.0f, 1.1f, 1.25f, 1.5f, 1.75f, 2.0f)
 private val SleepMinutes = listOf(15, 30, 45, 60)
 
 /**
- * The full player. The slider covers the current chapter rather than the whole book:
- * across a 20-hour book a phone-width slider moves minutes per pixel, too coarse to
- * find a sentence. The whole book is the line of text under it.
+ * The full player, in the web player's arrangement: the chapter title large, its
+ * place in the book in italic, the timeline, the transport centred under it, status
+ * on the left edge and speed on the right.
+ *
+ * Two timelines, one look. The draggable one covers the current chapter: across a
+ * 20-hour book a phone-width bar moves minutes per pixel, too coarse to find a
+ * sentence. The thin one under it is the whole book in chapter segments, the web's
+ * bar exactly, to show where this chapter sits.
  */
 @Composable
-fun PlayerScreen(now: NowPlaying, coverUrl: String?, player: BookPlayer, onClose: () -> Unit) {
+fun PlayerScreen(now: NowPlaying, coverUrl: String?, player: BookPlayer, onClose: () -> Unit, offer: @Composable () -> Unit = {}) {
     Column(
-        Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
     ) {
-        Row(Modifier.fillMaxWidth()) {
-            IconButton(onClick = onClose) { Icon(PlayerIcons.Collapse, contentDescription = "Close player") }
-        }
-
-        Cover(coverUrl, now.title, Modifier.widthIn(max = 320.dp).fillMaxWidth())
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(now.title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
-            now.author?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            now.chapterTitle?.let { Text(it, style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center) }
-            now.chapterNumber?.let {
-                Text("Chapter $it of ${now.chapterCount}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            ControlButton(onClick = onClose, size = 44.dp, modifier = Modifier.padding(start = 0.dp)) {
+                Icon(PlayerIcons.Collapse, contentDescription = "Close player", tint = Palette.Muted, modifier = Modifier.size(24.dp))
             }
-            ChapterSlider(now, onSeek = player::seekTo)
-            Text(
-                "${((now.positionSeconds / now.durationSeconds.coerceAtLeast(1.0)) * 100).roundToInt()}% · " +
-                    formatRemaining(now.durationSeconds, now.positionSeconds) +
-                    if (now.speed != 1f) " at ${speedLabel(now.speed)}" else "",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            now.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            Spacer(Modifier.weight(1f))
+        }
+
+        Box(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 28.dp), contentAlignment = Alignment.Center) {
+            Cover(coverUrl, now.title, Modifier.widthIn(max = 340.dp).fillMaxWidth())
+        }
+
+        Text(now.chapterTitle ?: now.title, style = MaterialTheme.typography.headlineSmall)
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(now.title + (now.author?.let { " · $it" } ?: ""), style = secondaryItalic, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+            now.chapterNumber?.let { Text("Chapter $it of ${now.chapterCount}", style = secondaryItalic, modifier = Modifier.padding(start = 12.dp)) }
+        }
+
+        offer()
+
+        // The current chapter, draggable: a time label follows the finger.
+        val start = now.chapterStartSeconds ?: 0.0
+        val end = now.chapterEndSeconds ?: now.durationSeconds
+        var dragging by remember { mutableStateOf<Double?>(null) }
+        val shown = dragging ?: now.positionSeconds
+        Timeline(
+            position = now.positionSeconds, start = start, end = end, chapters = now.chapters,
+            interactive = true, onSeek = player::seekTo, onDrag = { dragging = it },
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(formatClock(shown - start), style = MaterialTheme.typography.bodySmall, color = Palette.Muted)
+            Text("−" + formatClock(end - shown), style = MaterialTheme.typography.bodySmall, color = Palette.Muted)
         }
 
         Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            Modifier.fillMaxWidth().padding(top = 18.dp),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = player::previousChapter, enabled = now.chapterCount > 1) {
-                Icon(PlayerIcons.PreviousChapter, contentDescription = "Previous chapter")
+            ControlButton(onClick = player::previousChapter, enabled = now.chapterCount > 1) {
+                Icon(PlayerIcons.PreviousChapter, contentDescription = "Previous chapter", tint = Palette.Ink, modifier = Modifier.size(22.dp))
             }
-            TextButton(onClick = { player.skipBy(-30.0) }) { Text("−30") }
-            FilledIconButton(onClick = player::togglePlayPause, modifier = Modifier.size(72.dp)) {
+            ControlButton(onClick = { player.skipBy(-30.0) }) { SkipIcon(forward = false, tint = Palette.Ink) }
+            ControlButton(onClick = player::togglePlayPause, size = 72.dp, solid = true, modifier = Modifier.padding(horizontal = 8.dp)) {
                 Icon(
                     if (now.isPlaying) PlayerIcons.Pause else PlayerIcons.Play,
                     contentDescription = if (now.isPlaying) "Pause" else "Play",
-                    modifier = Modifier.size(36.dp),
+                    tint = Palette.Page,
+                    modifier = Modifier.size(30.dp),
                 )
             }
-            TextButton(onClick = { player.skipBy(30.0) }) { Text("+30") }
-            IconButton(onClick = player::nextChapter, enabled = now.chapterCount > 1) {
-                Icon(PlayerIcons.NextChapter, contentDescription = "Next chapter")
+            ControlButton(onClick = { player.skipBy(30.0) }) { SkipIcon(forward = true, tint = Palette.Ink) }
+            ControlButton(onClick = player::nextChapter, enabled = now.chapterCount > 1) {
+                Icon(PlayerIcons.NextChapter, contentDescription = "Next chapter", tint = Palette.Ink, modifier = Modifier.size(22.dp))
             }
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
-            SpeedButton(now.speed, player::setSpeed)
-            SleepButton(now, player::setSleepTimer)
+        Row(
+            Modifier.fillMaxWidth().padding(top = 20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SleepControl(now, player::setSleepTimer)
+            SpeedControl(now.speed, player::setSpeed)
+        }
+
+        // The whole book, in the web's segmented bar.
+        Column(Modifier.padding(top = 32.dp, bottom = 24.dp)) {
+            Timeline(now.positionSeconds, 0.0, now.durationSeconds, now.chapters)
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("${((now.positionSeconds / now.durationSeconds.coerceAtLeast(1.0)) * 100).toInt()}% of the book", style = MaterialTheme.typography.bodySmall, color = Palette.Muted)
+                Text(formatRemaining(now.durationSeconds, now.positionSeconds), style = MaterialTheme.typography.bodySmall, color = Palette.Muted)
+            }
         }
     }
 }
 
+/** Speed: muted label and a small bordered value, as the web's select. */
 @Composable
-private fun ChapterSlider(now: NowPlaying, onSeek: (Double) -> Unit) {
-    val start = now.chapterStartSeconds ?: 0.0
-    val end = (now.chapterEndSeconds ?: now.durationSeconds).coerceAtLeast(start + 1)
-    // While dragging, the thumb follows the finger; the seek happens on release, so a
-    // drag across the chapter is one seek, not dozens.
-    var dragging by remember { mutableStateOf<Float?>(null) }
-    val shown = dragging ?: (now.positionSeconds - start).toFloat()
-
-    Slider(
-        value = shown.coerceIn(0f, (end - start).toFloat()),
-        onValueChange = { dragging = it },
-        onValueChangeFinished = {
-            dragging?.let { onSeek(start + it) }
-            dragging = null
-        },
-        valueRange = 0f..(end - start).toFloat(),
-        modifier = Modifier.fillMaxWidth(),
-    )
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(formatClock(shown.toDouble()), style = MaterialTheme.typography.bodySmall)
-        Text("−" + formatClock(end - start - shown), style = MaterialTheme.typography.bodySmall)
-    }
-}
-
-@Composable
-private fun SpeedButton(speed: Float, onSpeed: (Float) -> Unit) {
+private fun SpeedControl(speed: Float, onSpeed: (Float) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    Box {
-        OutlinedButton(onClick = { open = true }) { Text(speedLabel(speed)) }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            Speeds.forEach { s ->
-                DropdownMenuItem(text = { Text(speedLabel(s)) }, onClick = { onSpeed(s); open = false })
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Speed", style = MaterialTheme.typography.bodyMedium, color = Palette.Muted)
+        Box {
+            Text(
+                speedLabel(speed),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier
+                    .border(1.dp, Palette.Rule, RoundedCornerShape(6.dp))
+                    .clickable { open = true }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            )
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Palette.Cloth) {
+                Speeds.forEach { s ->
+                    DropdownMenuItem(
+                        text = { Text(speedLabel(s), fontWeight = if (s == speed) FontWeight.SemiBold else FontWeight.Normal) },
+                        trailingIcon = { if (s == speed) Text("✓") },
+                        onClick = { onSpeed(s); open = false },
+                    )
+                }
             }
         }
     }
 }
 
+/** The sleep timer, as the status on the left edge: muted italic, tappable. */
 @Composable
-private fun SleepButton(now: NowPlaying, onTimer: (SleepTimer?) -> Unit) {
+private fun SleepControl(now: NowPlaying, onTimer: (SleepTimer?) -> Unit) {
     var open by remember { mutableStateOf(false) }
     val label = when {
-        now.sleepAtChapterEnd -> "Sleep: end of chapter"
-        now.sleepRemainingSeconds != null -> "Sleep: ${formatClock(now.sleepRemainingSeconds!!)}"
+        now.sleepAtChapterEnd -> "Sleeping at the chapter's end"
+        now.sleepRemainingSeconds != null -> "Sleeping in ${formatClock(now.sleepRemainingSeconds!!)}"
+        now.isBuffering && now.isPlaying -> "Loading…"
         else -> "Sleep timer"
     }
     Box {
-        OutlinedButton(onClick = { open = true }) { Text(label) }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        Text(label, style = secondaryItalic, modifier = Modifier.clickable { open = true }.padding(vertical = 6.dp))
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Palette.Cloth) {
             SleepMinutes.forEach { m ->
-                DropdownMenuItem(text = { Text("$m minutes") }, onClick = { onTimer(SleepTimer.After(m)); open = false })
+                DropdownMenuItem(text = { Text("In $m minutes") }, onClick = { onTimer(SleepTimer.After(m)); open = false })
             }
-            DropdownMenuItem(text = { Text("End of chapter") }, onClick = { onTimer(SleepTimer.EndOfChapter); open = false })
+            DropdownMenuItem(text = { Text("At the end of this chapter") }, onClick = { onTimer(SleepTimer.EndOfChapter); open = false })
             if (now.sleepAtChapterEnd || now.sleepRemainingSeconds != null) {
                 DropdownMenuItem(text = { Text("Off") }, onClick = { onTimer(null); open = false })
             }
@@ -171,7 +190,4 @@ private fun SleepButton(now: NowPlaying, onTimer: (SleepTimer?) -> Unit) {
     }
 }
 
-private fun speedLabel(speed: Float): String {
-    val text = speed.toString().trimEnd('0').trimEnd('.')
-    return "${text}×"
-}
+private fun speedLabel(speed: Float) = speed.toString().trimEnd('0').trimEnd('.') + "×"

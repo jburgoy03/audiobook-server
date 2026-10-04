@@ -189,6 +189,12 @@ grid exists → Android A5 downloads → … B4 when the iPhone app starts.
   server the app opens the library of downloads (the session check no longer blocks
   it). Positions are cached on the device, and an unsent report beats an older server
   value, so resume works offline.
+- **Design: done 2026-10-04.** The app follows web/src/index.css token for token
+  ("black, bone and blood": red only means a position in a book), EB Garamond
+  bundled as static TTFs under the OFL (licence ships in composeResources/files),
+  and the web's icon paths. Phone-specific: a pinned masthead, and the player's
+  draggable bar covers the current chapter (the whole book sits under it). Blurb
+  emphasis (Open Library Markdown) renders as italic in both clients.
 - **Lesson:** `async` directly in `viewModelScope` crashes the app on failure whatever
   `await` is wrapped in; parallel calls go inside `coroutineScope { }`.
 - **Still to do:** ask for the notification permission (download progress is hidden

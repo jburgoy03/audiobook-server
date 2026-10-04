@@ -1,6 +1,7 @@
 package dev.deanburgoyne.audiobooks.playback
 
 import dev.deanburgoyne.audiobooks.api.BookDetail
+import dev.deanburgoyne.audiobooks.api.Chapter
 import kotlinx.coroutines.flow.StateFlow
 
 /** What's playing, in book terms. Null in [BookPlayer.state] when nothing is loaded. */
@@ -24,6 +25,8 @@ data class NowPlaying(
     /** Sleep timer: seconds until it pauses, or [sleepAtChapterEnd]; both empty when off. */
     val sleepRemainingSeconds: Double? = null,
     val sleepAtChapterEnd: Boolean = false,
+    /** The book's chapters, for the segmented timeline. */
+    val chapters: List<Chapter> = emptyList(),
 )
 
 sealed interface SleepTimer {

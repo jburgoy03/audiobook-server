@@ -244,6 +244,7 @@ class AndroidBookPlayer(
             chapterCount = chapters.size,
             sleepRemainingSeconds = sleepDeadline?.let { (it - SystemClock.elapsedRealtime()).coerceAtLeast(0) / 1000.0 },
             sleepAtChapterEnd = sleepAtSeconds != null,
+            chapters = chapters,
         )
     }
 

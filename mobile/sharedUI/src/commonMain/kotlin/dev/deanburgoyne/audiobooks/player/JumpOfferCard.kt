@@ -1,40 +1,47 @@
 package dev.deanburgoyne.audiobooks.player
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.deanburgoyne.audiobooks.playback.formatClock
 import dev.deanburgoyne.audiobooks.progress.JumpOffer
-import dev.deanburgoyne.audiobooks.ui.formatDuration
+import dev.deanburgoyne.audiobooks.ui.Palette
+import dev.deanburgoyne.audiobooks.ui.PillButton
+import dev.deanburgoyne.audiobooks.ui.QuietButton
 
 /**
- * Another device got further. Never acted on silently: jumping skips listening the
- * person may not have heard, staying overwrites the other device's position. Their
- * call, and either answer is remembered for that server state.
+ * Another device got further: a quiet line, not a dialog, and no red (the offer is
+ * somewhere else's position, not this book's playhead). The book keeps playing where
+ * it is until the listener picks. The web's wording: "Further along on <device>, at <time>".
  */
 @Composable
-fun JumpOfferCard(offer: JumpOffer, currentPositionSeconds: Double, onJump: () -> Unit, onStay: () -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                "${offer.deviceName ?: "Another device"} is " +
-                    "${formatDuration(offer.positionSeconds - currentPositionSeconds)} further along.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onJump) { Text("Jump there") }
-                TextButton(onClick = onStay) { Text("Stay here") }
-            }
+fun JumpOfferCard(offer: JumpOffer, onJump: () -> Unit, onStay: () -> Unit, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(10.dp)
+    Column(
+        modifier
+            .fillMaxWidth()
+            .background(Palette.Raised, shape)
+            .border(1.dp, Palette.Rule, shape)
+            .padding(start = 16.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            "Further along on ${offer.deviceName ?: "another device"}, at ${formatClock(offer.positionSeconds)}",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            PillButton("Jump there", onJump)
+            QuietButton("Stay here", onStay)
         }
     }
 }

@@ -1,6 +1,5 @@
 package dev.deanburgoyne.audiobooks
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -12,6 +11,7 @@ import coil3.ImageLoader
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import dev.deanburgoyne.audiobooks.api.AudiobookApi
 import dev.deanburgoyne.audiobooks.library.LibraryHost
+import dev.deanburgoyne.audiobooks.ui.AudiobooksTheme
 import dev.deanburgoyne.audiobooks.playback.BookPlayer
 import dev.deanburgoyne.audiobooks.downloads.DownloadSettings
 import dev.deanburgoyne.audiobooks.downloads.Downloads
@@ -60,7 +60,7 @@ fun App(
         if (ask) localNetwork.request(session::onLocalNetworkAnswer)
     }
 
-    MaterialTheme {
+    AudiobooksTheme {
         Surface {
             when (val s = screen) {
                 SessionScreen.Starting -> StartingScreen()
