@@ -7,8 +7,25 @@
     <UserSecretsId>a2a57e57-4c41-4d44-8a19-b898b585ec83</UserSecretsId>
   </PropertyGroup>
 
+  <!--
+    The API contract, written to docs/openapi.json on every build and committed. The
+    mobile apps are written against it, and a renamed or removed field shows up as a
+    diff in review. Generation runs the app's startup up to building the host (not the
+    database seeding after it), so it needs no database. Debug builds only: the
+    Release publish in the Dockerfile has no use for it.
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <OpenApiGenerateDocuments>true</OpenApiGenerateDocuments>
+    <OpenApiDocumentsDirectory>$(MSBuildProjectDirectory)/../../docs</OpenApiDocumentsDirectory>
+    <OpenApiGenerateDocumentsOptions>--file-name openapi</OpenApiGenerateDocumentsOptions>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.11">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

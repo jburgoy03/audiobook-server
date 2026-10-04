@@ -68,11 +68,11 @@ public static class AdminBookEndpoints
 
             var title = MetadataOverride.Normalize(request.Title, book.Title, MetadataOverride.MaxTitleLength);
             if (!title.Ok)
-                return Results.BadRequest(new { error = $"A title can be at most {MetadataOverride.MaxTitleLength} characters." });
+                return Results.Problem($"A title can be at most {MetadataOverride.MaxTitleLength} characters.", statusCode: StatusCodes.Status400BadRequest);
 
             var author = MetadataOverride.Normalize(request.Author, book.Author, MetadataOverride.MaxAuthorLength);
             if (!author.Ok)
-                return Results.BadRequest(new { error = $"An author can be at most {MetadataOverride.MaxAuthorLength} characters." });
+                return Results.Problem($"An author can be at most {MetadataOverride.MaxAuthorLength} characters.", statusCode: StatusCodes.Status400BadRequest);
 
             book.TitleOverride = title.Value;
             book.AuthorOverride = author.Value;
@@ -98,14 +98,14 @@ public static class AdminBookEndpoints
             }
             catch (HttpRequestException ex)
             {
-                return Results.Json(
-                    new { error = $"Couldn't ask the catalogues ({ex.Message})." },
+                return Results.Problem(
+                    $"Couldn't ask the catalogues ({ex.Message}).",
                     statusCode: StatusCodes.Status502BadGateway);
             }
             catch (TaskCanceledException) when (!ct.IsCancellationRequested)
             {
-                return Results.Json(
-                    new { error = "The catalogues took too long to answer." },
+                return Results.Problem(
+                    "The catalogues took too long to answer.",
                     statusCode: StatusCodes.Status504GatewayTimeout);
             }
 

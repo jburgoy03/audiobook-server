@@ -79,13 +79,16 @@ public static class ProgressEndpoints
                 .FirstOrDefaultAsync(ct);
 
             return progress is null ? Results.NoContent() : Results.Ok(progress);
-        });
+        })
+        .Produces<ProgressDto>()
+        .Produces(StatusCodes.Status204NoContent)
+        .Produces(StatusCodes.Status404NotFound);
 
         app.MapPost("/api/progress", async (
             ProgressReport report, ClaimsPrincipal principal, AudiobookDbContext db, CancellationToken ct) =>
         {
             if (!double.IsFinite(report.PositionSeconds))
-                return Results.BadRequest(new { error = "positionSeconds must be a finite number." });
+                return Results.Problem("positionSeconds must be a finite number.", statusCode: StatusCodes.Status400BadRequest);
 
             var userId = principal.GetUserId();
 
@@ -103,7 +106,10 @@ public static class ProgressEndpoints
                     db.ChangeTracker.Clear();
                 }
             }
-        });
+        })
+        .Produces<ProgressResult>()
+        .ProducesProblem(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status404NotFound);
 
         return app;
     }

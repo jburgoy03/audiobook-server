@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using AudiobookServer.Api.Endpoints;
 using AudiobookServer.Core.Entities;
 using AudiobookServer.Core.Scanning;
@@ -123,6 +124,11 @@ public class AdminBookTests(ApiFixture api)
             new { title = "Fine", author = new string('x', 301) });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        // Every error is ProblemDetails: the one shape the apps parse.
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(400, problem.GetProperty("status").GetInt32());
+        Assert.StartsWith("An author can be at most", problem.GetProperty("detail").GetString());
         await using var db = api.NewDbContext();
         Assert.Null(await db.Books.Where(b => b.Id == bookId).Select(b => b.TitleOverride).SingleAsync());
     }

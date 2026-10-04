@@ -34,8 +34,8 @@ public static class AdminUserEndpoints
                 AccountFailure.None => Results.Created(
                     $"/api/admin/users/{result.User!.Id}",
                     new TemporaryPasswordResponse(result.User.Id, result.User.UserName!, result.TemporaryPassword!)),
-                AccountFailure.Conflict => Results.Conflict(new { error = result.Message }),
-                _ => Results.BadRequest(new { error = result.Message }),
+                AccountFailure.Conflict => Results.Problem(result.Message, statusCode: StatusCodes.Status409Conflict),
+                _ => Results.Problem(result.Message, statusCode: StatusCodes.Status400BadRequest),
             };
         });
 
@@ -47,7 +47,7 @@ public static class AdminUserEndpoints
             var result = await accounts.ResetPasswordAsync(user);
             return result.Succeeded
                 ? Results.Ok(new TemporaryPasswordResponse(user.Id, user.UserName!, result.TemporaryPassword!))
-                : Results.BadRequest(new { error = result.Message });
+                : Results.Problem(result.Message, statusCode: StatusCodes.Status400BadRequest);
         });
 
         users.MapPost("/{id:guid}/disable", async (Guid id, ClaimsPrincipal principal, AccountAdmin accounts) =>
@@ -56,7 +56,7 @@ public static class AdminUserEndpoints
                 return Results.NotFound();
 
             var result = await accounts.DisableAsync(user, principal.GetUserId());
-            return result.Succeeded ? Results.NoContent() : Results.BadRequest(new { error = result.Message });
+            return result.Succeeded ? Results.NoContent() : Results.Problem(result.Message, statusCode: StatusCodes.Status400BadRequest);
         });
 
         users.MapPut("/{id:guid}/libraries", async (Guid id, SetLibrariesRequest request, AccountAdmin accounts, CancellationToken ct) =>
@@ -65,7 +65,7 @@ public static class AdminUserEndpoints
                 return Results.NotFound();
 
             var result = await accounts.SetLibrariesAsync(user, request.LibraryIds ?? [], ct);
-            return result.Succeeded ? Results.NoContent() : Results.BadRequest(new { error = result.Message });
+            return result.Succeeded ? Results.NoContent() : Results.Problem(result.Message, statusCode: StatusCodes.Status400BadRequest);
         });
 
         users.MapPost("/{id:guid}/enable", async (Guid id, AccountAdmin accounts) =>
@@ -74,7 +74,7 @@ public static class AdminUserEndpoints
                 return Results.NotFound();
 
             var result = await accounts.EnableAsync(user);
-            return result.Succeeded ? Results.NoContent() : Results.BadRequest(new { error = result.Message });
+            return result.Succeeded ? Results.NoContent() : Results.Problem(result.Message, statusCode: StatusCodes.Status400BadRequest);
         });
 
         return app;

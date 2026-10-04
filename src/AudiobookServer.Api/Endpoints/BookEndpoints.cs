@@ -18,17 +18,15 @@ public static class BookEndpoints
             await db.VisibleBooks(principal)
                 // An admin's override wins over the scanned value (COALESCE in SQL).
                 .OrderBy(b => b.AuthorOverride ?? b.Author).ThenBy(b => b.TitleOverride ?? b.Title)
-                .Select(b => new
-                {
+                .Select(b => new BookSummaryDto(
                     b.Id,
-                    Title = b.TitleOverride ?? b.Title,
-                    Author = b.AuthorOverride ?? b.Author,
+                    b.TitleOverride ?? b.Title,
+                    b.AuthorOverride ?? b.Author,
                     b.DurationSeconds,
-                    HasCover = b.CoverPath != null,
-                    Files = b.Files.Count,
-                    Chapters = b.Chapters.Count,
-                    b.AddedAt
-                })
+                    b.CoverPath != null,
+                    b.Files.Count,
+                    b.Chapters.Count,
+                    b.AddedAt))
                 .ToListAsync(ct));
 
         app.MapGet("/api/books/{id:guid}", async (
@@ -36,48 +34,34 @@ public static class BookEndpoints
         {
             var book = await db.VisibleBooks(principal)
                 .Where(b => b.Id == id)
-                .Select(b => new
-                {
+                .Select(b => new BookDetailDto(
                     b.Id,
-                    Title = b.TitleOverride ?? b.Title,
+                    b.TitleOverride ?? b.Title,
                     b.Subtitle,
-                    Author = b.AuthorOverride ?? b.Author,
+                    b.AuthorOverride ?? b.Author,
                     b.Narrator,
                     b.Description,
                     b.DescriptionSource,
                     b.PublishedYear,
                     b.DurationSeconds,
-                    HasCover = b.CoverPath != null,
-                    // The library's credit line, e.g. "Public domain · LibriVox".
-                    Credit = b.Library!.Credit,
-                    // Files are derived data replaced wholesale on rescan, so their IDs are
-                    // deliberately absent: clients address them by Sequence, which survives.
-                    Files = b.Files
+                    b.CoverPath != null,
+                    b.Library!.Credit,
+                    b.Files
                         .OrderBy(f => f.Sequence)
-                        .Select(f => new
-                        {
-                            f.Sequence,
-                            f.StartOffsetSeconds,
-                            f.DurationSeconds,
-                            f.MimeType,
-                            f.SizeBytes
-                        })
+                        .Select(f => new BookFileDto(
+                            f.Sequence, f.StartOffsetSeconds, f.DurationSeconds, f.MimeType, f.SizeBytes))
                         .ToList(),
-                    Chapters = b.Chapters
+                    b.Chapters
                         .OrderBy(c => c.Sequence)
-                        .Select(c => new
-                        {
-                            c.Sequence,
-                            c.Title,
-                            c.StartOffsetSeconds,
-                            c.EndOffsetSeconds
-                        })
-                        .ToList()
-                })
+                        .Select(c => new ChapterDto(
+                            c.Sequence, c.Title, c.StartOffsetSeconds, c.EndOffsetSeconds))
+                        .ToList()))
                 .FirstOrDefaultAsync(ct);
 
             return book is null ? Results.NotFound() : Results.Ok(book);
-        });
+        })
+        .Produces<BookDetailDto>()
+        .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/books/{id:guid}/cover", async (
             Guid id, ClaimsPrincipal principal, AudiobookDbContext db, ICoverStore covers,

@@ -64,7 +64,10 @@ public static class AuthEndpoints
 
             // The sign-in handler has already written the cookie or the token body.
             return TypedResults.Empty;
-        }).AllowAnonymous();
+        })
+        // The bearer form's body, written by the sign-in handler (none with cookies).
+        .Produces<AccessTokenResponse>()
+        .AllowAnonymous();
 
         // Anonymous because the access token may already have expired; the refresh token
         // is the credential. The security-stamp check means a password change ends
@@ -84,7 +87,9 @@ public static class AuthEndpoints
 
             var principal = await signIn.CreateUserPrincipalAsync(user);
             return TypedResults.SignIn(principal, authenticationScheme: IdentityConstants.BearerScheme);
-        }).AllowAnonymous();
+        })
+        .Produces<AccessTokenResponse>()
+        .AllowAnonymous();
 
         // Clears the cookie. Anonymous so that signing out with an already-expired
         // session still succeeds. Bearer clients sign out by discarding their tokens.
@@ -117,7 +122,7 @@ public static class AuthEndpoints
             var result = await accounts.ChangeOwnPasswordAsync(
                 user, request.CurrentPassword ?? "", request.NewPassword ?? "");
             if (!result.Succeeded)
-                return Results.BadRequest(new { error = result.Message });
+                return Results.Problem(result.Message, statusCode: StatusCodes.Status400BadRequest);
 
             var bearer = http.Request.Headers.Authorization.ToString()
                 .StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);

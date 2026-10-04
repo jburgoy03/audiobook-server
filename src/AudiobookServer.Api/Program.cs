@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AudiobookServer.Api.Auth;
@@ -74,6 +75,12 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
     o.KnownProxies.Clear();
 });
 
+// Every error body is RFC 7807 ProblemDetails ({ title, status, detail }), so a
+// client parses one shape. Endpoints return Results.Problem; this covers the rest
+// (unhandled exceptions become a 500 problem with no stack trace outside
+// Development).
+builder.Services.AddProblemDetails();
+
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
@@ -85,8 +92,14 @@ if (adminArgs is not null)
     return;
 }
 
-await UserSeeder.SeedAsync(app.Services);
+// The build generates docs/openapi.json by running this file with a tool
+// (GetDocument.Insider) that reads the endpoint metadata and never serves a request.
+// There's no database at build time, so seeding is skipped there.
+var generatingOpenApiDocument = Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider";
+if (!generatingOpenApiDocument)
+    await UserSeeder.SeedAsync(app.Services);
 
+app.UseExceptionHandler();
 app.UseForwardedHeaders();
 
 // The built web client (wwwroot, populated by the Docker build). Served before
@@ -116,6 +129,7 @@ if (app.Environment.IsDevelopment())
 // No UseHttpsRedirection: TLS terminates at Cloudflare in production, and in
 // development the web client reaches the API over plain HTTP through Vite's proxy.
 
+app.MapServerInfoEndpoints();
 app.MapAuthEndpoints();
 app.MapProgressEndpoints();
 app.MapLibraryEndpoints();

@@ -65,7 +65,7 @@ public static class LibraryEndpoints
         libraries.MapPost("", async (CreateLibraryRequest req, AudiobookDbContext db) =>
         {
             if (!Directory.Exists(req.RootPath))
-                return Results.BadRequest(new { error = $"Path not found on server: {req.RootPath}" });
+                return Results.Problem($"Path not found on server: {req.RootPath}", statusCode: StatusCodes.Status400BadRequest);
 
             var library = new Library
             {
@@ -96,7 +96,7 @@ public static class LibraryEndpoints
             if (req.Name is not null)
             {
                 if (string.IsNullOrWhiteSpace(req.Name))
-                    return Results.BadRequest(new { error = "name must not be empty." });
+                    return Results.Problem("name must not be empty.", statusCode: StatusCodes.Status400BadRequest);
                 library.Name = req.Name.Trim();
             }
 
