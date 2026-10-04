@@ -26,7 +26,8 @@ public static class BookEndpoints
                     b.CoverPath != null,
                     b.Files.Count,
                     b.Chapters.Count,
-                    b.AddedAt))
+                    b.AddedAt,
+                    b.ContentVersion))
                 .ToListAsync(ct));
 
         app.MapGet("/api/books/{id:guid}", async (
@@ -55,7 +56,8 @@ public static class BookEndpoints
                         .OrderBy(c => c.Sequence)
                         .Select(c => new ChapterDto(
                             c.Sequence, c.Title, c.StartOffsetSeconds, c.EndOffsetSeconds))
-                        .ToList()))
+                        .ToList(),
+                    b.ContentVersion))
                 .FirstOrDefaultAsync(ct);
 
             return book is null ? Results.NotFound() : Results.Ok(book);

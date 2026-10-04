@@ -15,7 +15,10 @@ public sealed record BookSummaryDto(
     bool HasCover,
     int Files,
     int Chapters,
-    DateTimeOffset AddedAt);
+    DateTimeOffset AddedAt,
+    // Compare with a download's stored value; different means re-download. Null for a
+    // book not rescanned since content versions were added: treat as unknown.
+    string? ContentVersion);
 
 /// <summary><c>GET /api/books/{id}</c>.</summary>
 public sealed record BookDetailDto(
@@ -32,7 +35,8 @@ public sealed record BookDetailDto(
     // The library's credit line, e.g. "Public domain · LibriVox".
     string? Credit,
     IReadOnlyList<BookFileDto> Files,
-    IReadOnlyList<ChapterDto> Chapters);
+    IReadOnlyList<ChapterDto> Chapters,
+    string? ContentVersion);
 
 /// <summary>
 /// One audio file on the book's timeline. Files are derived data replaced wholesale on

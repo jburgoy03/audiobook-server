@@ -983,7 +983,8 @@
           "hasCover",
           "credit",
           "files",
-          "chapters"
+          "chapters",
+          "contentVersion"
         ],
         "type": "object",
         "properties": {
@@ -1061,6 +1062,12 @@
             "items": {
               "$ref": "#/components/schemas/ChapterDto"
             }
+          },
+          "contentVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -1123,7 +1130,8 @@
           "hasCover",
           "files",
           "chapters",
-          "addedAt"
+          "addedAt",
+          "contentVersion"
         ],
         "type": "object",
         "properties": {
@@ -1170,6 +1178,12 @@
           "addedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "contentVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

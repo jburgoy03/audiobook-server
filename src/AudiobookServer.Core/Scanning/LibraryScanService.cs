@@ -74,6 +74,7 @@ public class LibraryScanService(
 
                 if (!force && existing.Count > 0 && !NeedsRescan(existing, candidate, library.RootPath))
                 {
+                    await BackfillContentVersionsAsync(existing, ct);
                     unchanged += existing.Count;
                     continue;
                 }
@@ -307,6 +308,22 @@ public class LibraryScanService(
         }
     }
 
+    /// <summary>
+    /// Books stored before content versions existed get one from their stored files,
+    /// which an unchanged book's are by definition: no probing, one update per book,
+    /// once. Changed books get theirs from the rescan instead.
+    /// </summary>
+    private async Task BackfillContentVersionsAsync(List<Book> existing, CancellationToken ct)
+    {
+        foreach (var book in existing.Where(b => b.ContentVersion is null))
+        {
+            var version = ContentVersion.For(book.Files);
+            await db.Books
+                .Where(b => b.Id == book.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(b => b.ContentVersion, version), ct);
+        }
+    }
+
     private static Book BuildBook(ScannedBook scanned, Guid libraryId, Guid bookId, string? coverPath)
     {
         var book = new Book
@@ -319,6 +336,7 @@ public class LibraryScanService(
             Narrator = scanned.Narrator,
             RelativePath = scanned.Key,
             DurationSeconds = scanned.DurationSeconds,
+            ContentVersion = ContentVersion.For(scanned.Files),
             AddedAt = DateTimeOffset.UtcNow,
             LastScannedAt = DateTimeOffset.UtcNow
         };
@@ -341,6 +359,8 @@ public class LibraryScanService(
     /// </summary>
     private async Task ReplaceContentsAsync(Guid bookId, ScannedBook scanned, string? coverPath, CancellationToken ct)
     {
+        var contentVersion = ContentVersion.For(scanned.Files);
+
         await db.Books
             .Where(b => b.Id == bookId)
             .ExecuteUpdateAsync(s => s
@@ -348,6 +368,7 @@ public class LibraryScanService(
                 .SetProperty(b => b.Author, scanned.Author)
                 .SetProperty(b => b.Narrator, scanned.Narrator)
                 .SetProperty(b => b.DurationSeconds, scanned.DurationSeconds)
+                .SetProperty(b => b.ContentVersion, contentVersion)
                 .SetProperty(b => b.CoverPath, coverPath)
                 .SetProperty(b => b.LastScannedAt, DateTimeOffset.UtcNow), ct);
 

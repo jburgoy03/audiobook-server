@@ -70,7 +70,11 @@ Rules now in `docs/api-contract.md`.
   route and bumps `apiVersion`; the app compares and says "update the server" or
   "update the app" instead of failing to parse.
 
-### B2 — Downloads
+### B2 — Downloads — done 2026-10-04
+
+Built as planned except where it's computed: in `Core/Scanning/ContentVersion.cs`
+from sequence, path, size, mtime and duration (ms). Existing books get theirs on
+their next scan, from stored files (no re-probe); `null` until then means unknown.
 
 - `contentVersion` on the book summary and detail: a hash of each file's sequence,
   size, mtime and duration, computed at scan time and stored on `Book`

@@ -22,7 +22,7 @@ public class BookContractTests(ApiFixture api)
         var row = books!.Single(b => b.GetProperty("id").GetGuid() == api.PublicBookId);
 
         Assert.Equal(
-            ["addedAt", "author", "chapters", "durationSeconds", "files", "hasCover", "id", "title"],
+            ["addedAt", "author", "chapters", "contentVersion", "durationSeconds", "files", "hasCover", "id", "title"],
             Names(row));
     }
 
@@ -34,7 +34,7 @@ public class BookContractTests(ApiFixture api)
 
         Assert.Equal(
             [
-                "author", "chapters", "credit", "description", "descriptionSource", "durationSeconds",
+                "author", "chapters", "contentVersion", "credit", "description", "descriptionSource", "durationSeconds",
                 "files", "hasCover", "id", "narrator", "publishedYear", "subtitle", "title",
             ],
             Names(book));

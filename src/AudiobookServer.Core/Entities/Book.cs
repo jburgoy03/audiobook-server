@@ -37,6 +37,12 @@ public class Book
     /// <summary>Total playable length of the book, summed across all files.</summary>
     public double DurationSeconds { get; set; }
 
+    /// <summary>
+    /// Fingerprint of the files as clients address them (see ContentVersion). Set by
+    /// the scanner; null for a book stored before it existed, until the next scan.
+    /// </summary>
+    public string? ContentVersion { get; set; }
+
     public string? CoverPath { get; set; }
 
     public Guid LibraryId { get; set; }
