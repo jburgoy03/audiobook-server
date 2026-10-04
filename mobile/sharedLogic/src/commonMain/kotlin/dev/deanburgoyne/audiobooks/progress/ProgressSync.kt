@@ -7,7 +7,10 @@ import dev.deanburgoyne.audiobooks.api.ProgressReport
 import dev.deanburgoyne.audiobooks.api.SessionExpiredException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -68,6 +71,11 @@ class ProgressSync(
 ) {
     private val _offer = MutableStateFlow<JumpOffer?>(null)
     val offer: StateFlow<JumpOffer?> = _offer.asStateFlow()
+
+    private val _saved = MutableSharedFlow<Progress>(extraBufferCapacity = 8)
+
+    /** Positions the server accepted, so screens showing progress can follow along. */
+    val saved: SharedFlow<Progress> = _saved.asSharedFlow()
 
     private var bookId: String? = null
     private var reconciled = false
@@ -153,6 +161,7 @@ class ProgressSync(
             }
 
             pending.remove(report)
+            if (result.accepted) _saved.tryEmit(result.progress)
             if (!result.accepted && report.bookId == bookId) {
                 considerOffer(report.bookId, result.progress, report.positionSeconds)
             }

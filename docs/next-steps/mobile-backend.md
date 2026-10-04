@@ -165,7 +165,11 @@ grid exists → Android A5 downloads → … B4 when the iPhone app starts.
 - **A3 — playback (3a, 3b): done 2026-10-04.** Shared timeline maths (mirrors
   web/src/player/timeline.ts). Media3 `MediaSessionService`: background, notification,
   lock screen, audio focus, pause on headphones out; per-request bearer header; a 401
-  mid-book refreshes and resumes. 3c (full player screen, icons) still to do.
+  mid-book refreshes and resumes.
+- **A3c + A6 — player screen: done 2026-10-04.** Chapter-scoped slider (book-wide is
+  minutes per pixel), chapter skip with a 3 s "restart first" grace, ±30 s, speed
+  0.8–2×, sleep timer (minutes, or end of chapter, parking on the boundary). Icons
+  drawn as vectors in code. The library follows accepted reports without a refresh.
 - **A4 — progress sync: done 2026-10-04.** `ProgressSync` (shared) mirrors the web's
   rules: reconcile on play, jump offer when another device is >30 s ahead, overrides only
   once reconciled with no offer open; saves every 30 s, on pause, seek and at the end.

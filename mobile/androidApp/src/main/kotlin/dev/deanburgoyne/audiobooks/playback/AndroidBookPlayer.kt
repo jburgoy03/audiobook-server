@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -44,6 +45,11 @@ class AndroidBookPlayer(context: Context, private val api: AudiobookApi) : BookP
     private var chapters: List<Chapter> = emptyList()
     private var chaptersFor: String? = null
 
+    // Sleep timer. A deadline on the monotonic clock (immune to the wall clock being
+    // changed), or a chapter end on the book timeline.
+    private var sleepDeadline: Long? = null
+    private var sleepAtSeconds: Double? = null
+
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = publish()
     }
@@ -63,7 +69,10 @@ class AndroidBookPlayer(context: Context, private val api: AudiobookApi) : BookP
         // Media3 reports state changes, but not the position ticking along.
         scope.launch {
             while (true) {
-                if (controller?.isPlaying == true) publish()
+                if (controller?.isPlaying == true) {
+                    checkSleepTimer()
+                    publish()
+                }
                 delay(500)
             }
         }
@@ -136,7 +145,44 @@ class AndroidBookPlayer(context: Context, private val api: AudiobookApi) : BookP
 
     override fun setSpeed(speed: Float) = withController { it.setPlaybackSpeed(speed) }
 
+    override fun setSleepTimer(timer: SleepTimer?) {
+        sleepDeadline = null
+        sleepAtSeconds = null
+        when (timer) {
+            null -> Unit
+            is SleepTimer.After -> sleepDeadline = SystemClock.elapsedRealtime() + timer.minutes * 60_000L
+            SleepTimer.EndOfChapter -> {
+                val now = _state.value ?: return
+                // No chapters: the end of the book, which stops anyway.
+                sleepAtSeconds = now.chapterEndSeconds ?: now.durationSeconds
+            }
+        }
+        publish()
+    }
+
+    /**
+     * Checked every half second while playing. At a chapter end it pauses and then
+     * parks exactly on the boundary (polling overshoots by up to half a second), so
+     * resuming starts the next chapter from its first word.
+     */
+    private fun checkSleepTimer() {
+        val c = controller ?: return
+        val deadline = sleepDeadline
+        if (deadline != null && SystemClock.elapsedRealtime() >= deadline) {
+            sleepDeadline = null
+            c.pause()
+        }
+        val at = sleepAtSeconds ?: return
+        val now = _state.value ?: return
+        if (now.positionSeconds >= at - 0.25) {
+            sleepAtSeconds = null
+            c.pause()
+            seekTo(at)
+        }
+    }
+
     override fun stop() = withController { c ->
+        setSleepTimer(null)
         c.stop()
         c.clearMediaItems()
     }
@@ -152,6 +198,8 @@ class AndroidBookPlayer(context: Context, private val api: AudiobookApi) : BookP
         ensureChapters(bookId)
 
         val position = fileStart(item) + c.currentPosition / 1000.0
+        val chapterIndex = chapters.indexAt(position)
+        val chapter = chapters.getOrNull(chapterIndex)
         _state.value = NowPlaying(
             bookId = bookId,
             title = item.mediaMetadata.albumTitle?.toString() ?: item.mediaMetadata.title?.toString().orEmpty(),
@@ -161,9 +209,15 @@ class AndroidBookPlayer(context: Context, private val api: AudiobookApi) : BookP
             // "Playing" as the user means it: asked to play, even while it buffers.
             isPlaying = c.playWhenReady && c.playbackState != Player.STATE_ENDED && c.playerError == null,
             isBuffering = c.playbackState == Player.STATE_BUFFERING,
-            chapterTitle = chapters.getOrNull(chapters.indexAt(position))?.title,
+            chapterTitle = chapter?.title,
             speed = c.playbackParameters.speed,
             error = c.playerError?.let { "Playback stopped: ${it.errorCodeName}" },
+            chapterStartSeconds = chapter?.startOffsetSeconds,
+            chapterEndSeconds = chapter?.endOffsetSeconds,
+            chapterNumber = chapter?.let { chapterIndex + 1 },
+            chapterCount = chapters.size,
+            sleepRemainingSeconds = sleepDeadline?.let { (it - SystemClock.elapsedRealtime()).coerceAtLeast(0) / 1000.0 },
+            sleepAtChapterEnd = sleepAtSeconds != null,
         )
     }
 

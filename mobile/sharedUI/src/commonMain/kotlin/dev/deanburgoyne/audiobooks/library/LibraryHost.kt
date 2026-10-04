@@ -18,6 +18,7 @@ import dev.deanburgoyne.audiobooks.api.AudiobookApi
 import dev.deanburgoyne.audiobooks.player.NowPlayingBar
 import dev.deanburgoyne.audiobooks.playback.BookPlayer
 import dev.deanburgoyne.audiobooks.player.JumpOfferCard
+import dev.deanburgoyne.audiobooks.player.PlayerScreen
 import dev.deanburgoyne.audiobooks.progress.ProgressSync
 import dev.deanburgoyne.audiobooks.ui.SystemBackHandler
 
@@ -27,15 +28,35 @@ import dev.deanburgoyne.audiobooks.ui.SystemBackHandler
  */
 @Composable
 fun LibraryHost(api: AudiobookApi, player: BookPlayer, progress: ProgressSync, onSignOut: () -> Unit) {
-    val library = viewModel { LibraryViewModel(api) }
+    val library = viewModel { LibraryViewModel(api, progress) }
     val state by library.state.collectAsState()
     var openBookId by rememberSaveable { mutableStateOf<String?>(null) }
+    var playerOpen by rememberSaveable { mutableStateOf(false) }
     val nowPlaying by player.state.collectAsState()
     val offer by progress.offer.collectAsState()
 
     // Thumbnails: 640 for the grid (two or three columns at phone density). The server
     // ignores ?size= until B3 ships, and sends the original.
     val gridCover = { hasCover: Boolean, id: String -> if (hasCover) api.coverUrl(id, size = 640) else null }
+
+    val playingNow = nowPlaying
+    if (playerOpen && playingNow != null) {
+        SystemBackHandler { playerOpen = false }
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f)) {
+                PlayerScreen(playingNow, api.coverUrl(playingNow.bookId, size = 1080), player, onClose = { playerOpen = false })
+            }
+            offer?.takeIf { it.bookId == playingNow.bookId }?.let { o ->
+                JumpOfferCard(
+                    offer = o,
+                    currentPositionSeconds = playingNow.positionSeconds,
+                    onJump = { progress.acceptOffer()?.let { player.seekTo(it.positionSeconds) } },
+                    onStay = { progress.dismissOffer(playingNow.positionSeconds) },
+                )
+            }
+        }
+        return
+    }
 
     Column(Modifier.fillMaxSize()) {
         // While the bar shows, it owns the navigation-bar inset; the screens above
@@ -82,7 +103,7 @@ fun LibraryHost(api: AudiobookApi, player: BookPlayer, progress: ProgressSync, o
                 now = now,
                 coverUrl = api.coverUrl(now.bookId, size = 320),
                 onToggle = player::togglePlayPause,
-                onOpen = { openBookId = now.bookId },
+                onOpen = { playerOpen = true },
             )
         }
     }

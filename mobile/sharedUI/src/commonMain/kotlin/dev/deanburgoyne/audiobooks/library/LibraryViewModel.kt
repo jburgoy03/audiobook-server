@@ -8,6 +8,7 @@ import dev.deanburgoyne.audiobooks.api.BookDetail
 import dev.deanburgoyne.audiobooks.api.BookSummary
 import dev.deanburgoyne.audiobooks.api.Progress
 import dev.deanburgoyne.audiobooks.api.SessionExpiredException
+import dev.deanburgoyne.audiobooks.progress.ProgressSync
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,11 +33,25 @@ data class LibraryState(
  * The library as of the last refresh. Online only for now: the offline cache (Room)
  * arrives with downloads, when there's something to read without a connection.
  */
-class LibraryViewModel(private val api: AudiobookApi) : ViewModel() {
+class LibraryViewModel(private val api: AudiobookApi, progress: ProgressSync) : ViewModel() {
     private val _state = MutableStateFlow(LibraryState())
     val state: StateFlow<LibraryState> = _state.asStateFlow()
 
-    init { refresh() }
+    init {
+        refresh()
+        // Follow this device's listening as the server accepts it, without a refresh.
+        viewModelScope.launch { progress.saved.collect { applySaved(it) } }
+    }
+
+    private fun applySaved(saved: Progress) = _state.update { state ->
+        val book = state.books.firstOrNull { it.id == saved.bookId } ?: return@update state
+        val others = state.continueListening.filter { it.book.id != saved.bookId }
+        state.copy(
+            progressByBook = state.progressByBook + (saved.bookId to saved),
+            // Most recent first: the book just listened to moves to the front.
+            continueListening = if (saved.isFinished) others else listOf(InProgress(book, saved)) + others,
+        )
+    }
 
     fun refresh() {
         _state.update { it.copy(loading = true, error = null) }

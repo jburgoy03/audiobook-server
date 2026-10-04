@@ -15,7 +15,22 @@ data class NowPlaying(
     val chapterTitle: String?,
     val speed: Float,
     val error: String?,
+    /** The current chapter's span; null when the book has no chapters. */
+    val chapterStartSeconds: Double? = null,
+    val chapterEndSeconds: Double? = null,
+    /** 1-based, for "Chapter 9 of 21"; null without chapters. */
+    val chapterNumber: Int? = null,
+    val chapterCount: Int = 0,
+    /** Sleep timer: seconds until it pauses, or [sleepAtChapterEnd]; both empty when off. */
+    val sleepRemainingSeconds: Double? = null,
+    val sleepAtChapterEnd: Boolean = false,
 )
+
+sealed interface SleepTimer {
+    data class After(val minutes: Int) : SleepTimer
+    /** Pause where the current chapter ends, so the next one starts cleanly on resume. */
+    data object EndOfChapter : SleepTimer
+}
 
 /**
  * The player as the UI sees it: one book, one timeline, positions in book seconds.
@@ -32,5 +47,7 @@ interface BookPlayer {
     fun previousChapter()
     fun nextChapter()
     fun setSpeed(speed: Float)
+    /** Null turns it off. */
+    fun setSleepTimer(timer: SleepTimer?)
     fun stop()
 }
