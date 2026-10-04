@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Release builds: HTTPS only (Android's default, stated explicitly). The debug build
+     replaces this file to allow plain HTTP to the development machine. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

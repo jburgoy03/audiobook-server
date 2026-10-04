@@ -147,3 +147,17 @@ grid exists → Android A5 downloads → … B4 when the iPhone app starts.
 - **SDK levels:** `minSdk 33` (Android 13), `targetSdk`/`compileSdk 37` (Android 17).
 - **Test hardware:** emulator for most work; a physical phone later for background
   playback, lock screen and Bluetooth controls.
+
+## Android progress
+
+- **A1 — skeleton and sign-in: done 2026-10-04.** KMP project in `mobile/`
+  (`sharedLogic` shared with iOS, `sharedUI` Android-only Compose, `iosApp` SwiftUI
+  shell). Server probe, bearer sign-in with single-flight refresh, Keystore-encrypted
+  session, forced passphrase change, debug-only cleartext to `10.0.2.2`.
+- **Found on the way: Android 17 local network protection.** Targeting API 37, an app
+  needs the runtime `ACCESS_LOCAL_NETWORK` permission to reach private addresses (home
+  LAN, Tailscale 100.x, the emulator's 10.0.2.2); without it connections time out.
+  The app asks only when the server address looks local. Gap: a bare hostname that
+  resolves to a LAN address isn't detected; offer the permission on a probe timeout.
+- **Open for the release build:** plain HTTP is refused outside debug. Self-hosters on
+  Tailscale over HTTP would need it allowed (Jellyfin's app does). Decide then.

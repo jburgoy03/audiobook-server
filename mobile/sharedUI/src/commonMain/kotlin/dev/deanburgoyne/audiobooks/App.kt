@@ -1,48 +1,55 @@
 package dev.deanburgoyne.audiobooks
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import org.jetbrains.compose.resources.painterResource
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.deanburgoyne.audiobooks.api.AudiobookApi
+import dev.deanburgoyne.audiobooks.session.ChangePasswordScreen
+import dev.deanburgoyne.audiobooks.session.ChooseServerScreen
+import dev.deanburgoyne.audiobooks.session.LocalNetworkPermission
+import dev.deanburgoyne.audiobooks.session.NoLocalNetworkPermission
+import dev.deanburgoyne.audiobooks.session.SessionScreen
+import dev.deanburgoyne.audiobooks.session.SessionViewModel
+import dev.deanburgoyne.audiobooks.session.SignInScreen
+import dev.deanburgoyne.audiobooks.session.SignedInScreen
+import dev.deanburgoyne.audiobooks.session.StartingScreen
+import dev.deanburgoyne.audiobooks.session.UnreachableScreen
 
-import dev.deanburgoyne.audiobooks.resources.Res
-import dev.deanburgoyne.audiobooks.resources.compose_multiplatform
-
+/**
+ * The app's root. A plain `when` over the session state stands in for navigation
+ * until there are screens to navigate between (the library, a book, the player).
+ */
 @Composable
-@Preview
-fun App() {
+fun App(
+    api: AudiobookApi,
+    localNetwork: LocalNetworkPermission = NoLocalNetworkPermission,
+    // Separate from [localNetwork] so the view model, which outlives activities, holds
+    // only a check (application context), never the activity's permission launcher.
+    localNetworkGranted: () -> Boolean = { true },
+) {
+    val session = viewModel { SessionViewModel(api, localNetworkGranted) }
+    val screen by session.screen.collectAsState()
+
+    // Ask whenever the state says to: after a rotation this simply asks again (the
+    // system answers at once if the user already decided).
+    val ask = (screen as? SessionScreen.ChooseServer)?.askLocalNetwork == true
+    LaunchedEffect(ask) {
+        if (ask) localNetwork.request(session::onLocalNetworkAnswer)
+    }
+
     MaterialTheme {
-        var showContent by remember { mutableStateOf(false) }
-        Column(
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .safeContentPadding()
-                .fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Button(onClick = { showContent = !showContent }) {
-                Text("Click me!")
-            }
-            AnimatedVisibility(showContent) {
-                val greeting = remember { Greeting().greet() }
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Image(painterResource(Res.drawable.compose_multiplatform), null)
-                    Text("Compose: $greeting")
-                }
+        Surface {
+            when (val s = screen) {
+                SessionScreen.Starting -> StartingScreen()
+                is SessionScreen.Unreachable -> UnreachableScreen(s, onRetry = session::resume, onChangeServer = session::chooseServer)
+                is SessionScreen.ChooseServer -> ChooseServerScreen(s, onSubmit = session::submitServer)
+                is SessionScreen.SignIn -> SignInScreen(s, onSubmit = session::signIn, onChangeServer = session::chooseServer)
+                is SessionScreen.ChangePassword -> ChangePasswordScreen(s, onSubmit = session::changePassword, onSignOut = session::signOut)
+                is SessionScreen.SignedIn -> SignedInScreen(s, onSignOut = session::signOut)
             }
         }
     }
