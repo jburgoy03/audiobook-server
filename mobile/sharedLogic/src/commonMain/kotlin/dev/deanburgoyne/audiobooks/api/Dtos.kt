@@ -96,3 +96,23 @@ data class Progress(
     val deviceName: String? = null,
     val isFinished: Boolean,
 )
+
+/**
+ * POST /api/progress. [reportedAt] is when playback reached the position (client
+ * time, ISO-8601), not when it's sent: a report replayed from the offline queue keeps
+ * its original time, which the server's same-device rule depends on.
+ */
+@Serializable
+data class ProgressReport(
+    val bookId: String,
+    val positionSeconds: Double,
+    val reportedAt: String,
+    val deviceId: String,
+    val deviceName: String,
+    val isFinished: Boolean,
+    val override: Boolean,
+)
+
+/** Rejection isn't an error: [progress] is what the server kept instead. */
+@Serializable
+data class ProgressResult(val accepted: Boolean, val reason: String, val progress: Progress)

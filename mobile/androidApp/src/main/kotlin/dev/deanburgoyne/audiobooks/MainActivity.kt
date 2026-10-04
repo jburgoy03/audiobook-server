@@ -20,6 +20,7 @@ class MainActivity : ComponentActivity() {
             App(
                 api,
                 player,
+                app.progress,
                 localNetwork = rememberLocalNetworkPermission(this),
                 localNetworkGranted = { hasLocalNetworkPermission(appContext) },
             )

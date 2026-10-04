@@ -159,5 +159,18 @@ grid exists → Android A5 downloads → … B4 when the iPhone app starts.
   LAN, Tailscale 100.x, the emulator's 10.0.2.2); without it connections time out.
   The app asks only when the server address looks local. Gap: a bare hostname that
   resolves to a LAN address isn't detected; offer the permission on a probe timeout.
+- **A2 — library: done 2026-10-04.** Continue listening, all books grid, book page with
+  chapters. Covers via Coil through the API's own Ktor client (auth interceptor; the
+  token only goes to the signed-in server).
+- **A3 — playback (3a, 3b): done 2026-10-04.** Shared timeline maths (mirrors
+  web/src/player/timeline.ts). Media3 `MediaSessionService`: background, notification,
+  lock screen, audio focus, pause on headphones out; per-request bearer header; a 401
+  mid-book refreshes and resumes. 3c (full player screen, icons) still to do.
+- **A4 — progress sync: done 2026-10-04.** `ProgressSync` (shared) mirrors the web's
+  rules: reconcile on play, jump offer when another device is >30 s ahead, overrides only
+  once reconciled with no offer open; saves every 30 s, on pause, seek and at the end.
+  Reports come from the playback service (alive while audio plays), queued offline
+  (one per book, SharedPreferences; Room waits for downloads). Verified both ways
+  against the web client.
 - **Open for the release build:** plain HTTP is refused outside debug. Self-hosters on
   Tailscale over HTTP would need it allowed (Jellyfin's app does). Decide then.

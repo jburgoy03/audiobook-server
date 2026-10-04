@@ -190,6 +190,19 @@ class AudiobookApi(
     /** The user's position in every book they've started, most recent first. */
     suspend fun progress(): List<Progress> = http.get(api("progress")).throwIfError().body()
 
+    /** The server's position for one book; null if not started (204) or not visible (404). */
+    suspend fun bookProgress(bookId: String): Progress? {
+        val response = http.get(api("books/$bookId/progress"))
+        if (response.status == HttpStatusCode.NoContent || response.status == HttpStatusCode.NotFound) return null
+        return response.throwIfError().body()
+    }
+
+    suspend fun reportProgress(report: ProgressReport): ProgressResult =
+        http.post(api("progress")) {
+            contentType(ContentType.Application.Json)
+            setBody(report)
+        }.throwIfError().body()
+
     /**
      * The cover's URL, for the image loader (which fetches through [httpClient], so it
      * is authorised). [size] is the longest side in pixels once the server supports

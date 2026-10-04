@@ -86,9 +86,9 @@ class AndroidBookPlayer(context: Context, private val api: AudiobookApi) : BookP
                         .setAlbumTitle(book.title)
                         .setArtworkUri(cover?.let(Uri::parse))
                         .setExtras(Bundle().apply {
-                            putString(KEY_BOOK_ID, book.id)
-                            putDouble(KEY_FILE_START, file.startOffsetSeconds)
-                            putDouble(KEY_BOOK_DURATION, book.durationSeconds)
+                            putString(BookItems.BOOK_ID, book.id)
+                            putDouble(BookItems.FILE_START, file.startOffsetSeconds)
+                            putDouble(BookItems.BOOK_DURATION, book.durationSeconds)
                         })
                         .build(),
                 )
@@ -103,6 +103,8 @@ class AndroidBookPlayer(context: Context, private val api: AudiobookApi) : BookP
     override fun togglePlayPause() = withController { c ->
         // After an error the player is idle: prepare again rather than "play" nothing.
         if (c.playbackState == Player.STATE_IDLE) c.prepare()
+        // At the end of the book, play means start over (as on the web).
+        if (c.playbackState == Player.STATE_ENDED) c.seekTo(0, 0)
         if (c.isPlaying) c.pause() else c.play()
     }
 
@@ -142,7 +144,7 @@ class AndroidBookPlayer(context: Context, private val api: AudiobookApi) : BookP
     private fun publish() {
         val c = controller ?: return
         val item = c.currentMediaItem
-        val bookId = item?.mediaMetadata?.extras?.getString(KEY_BOOK_ID)
+        val bookId = BookItems.bookId(item)
         if (item == null || bookId == null) {
             _state.value = null
             return
@@ -186,12 +188,6 @@ class AndroidBookPlayer(context: Context, private val api: AudiobookApi) : BookP
         controller?.let(action) ?: waiting.add(action)
     }
 
-    private fun fileStart(item: MediaItem) = item.mediaMetadata.extras?.getDouble(KEY_FILE_START) ?: 0.0
-    private fun bookDuration(item: MediaItem) = item.mediaMetadata.extras?.getDouble(KEY_BOOK_DURATION) ?: 0.0
-
-    private companion object {
-        const val KEY_BOOK_ID = "audiobooks.bookId"
-        const val KEY_FILE_START = "audiobooks.fileStart"
-        const val KEY_BOOK_DURATION = "audiobooks.bookDuration"
-    }
+    private fun fileStart(item: MediaItem) = BookItems.fileStart(item)
+    private fun bookDuration(item: MediaItem) = BookItems.bookDuration(item)
 }

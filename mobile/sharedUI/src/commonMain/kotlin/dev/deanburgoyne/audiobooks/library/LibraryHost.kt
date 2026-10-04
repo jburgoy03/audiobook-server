@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import dev.deanburgoyne.audiobooks.api.AudiobookApi
 import dev.deanburgoyne.audiobooks.player.NowPlayingBar
 import dev.deanburgoyne.audiobooks.playback.BookPlayer
+import dev.deanburgoyne.audiobooks.player.JumpOfferCard
+import dev.deanburgoyne.audiobooks.progress.ProgressSync
 import dev.deanburgoyne.audiobooks.ui.SystemBackHandler
 
 /**
@@ -24,11 +26,12 @@ import dev.deanburgoyne.audiobooks.ui.SystemBackHandler
  * open book's ID is saved state, so rotation and process death return to it.
  */
 @Composable
-fun LibraryHost(api: AudiobookApi, player: BookPlayer, onSignOut: () -> Unit) {
+fun LibraryHost(api: AudiobookApi, player: BookPlayer, progress: ProgressSync, onSignOut: () -> Unit) {
     val library = viewModel { LibraryViewModel(api) }
     val state by library.state.collectAsState()
     var openBookId by rememberSaveable { mutableStateOf<String?>(null) }
     val nowPlaying by player.state.collectAsState()
+    val offer by progress.offer.collectAsState()
 
     // Thumbnails: 640 for the grid (two or three columns at phone density). The server
     // ignores ?size= until B3 ships, and sends the original.
@@ -64,6 +67,15 @@ fun LibraryHost(api: AudiobookApi, player: BookPlayer, onSignOut: () -> Unit) {
                     onToggle = player::togglePlayPause,
                 )
             }
+        }
+        val playing = nowPlaying
+        offer?.takeIf { playing != null && it.bookId == playing.bookId }?.let { o ->
+            JumpOfferCard(
+                offer = o,
+                currentPositionSeconds = playing!!.positionSeconds,
+                onJump = { progress.acceptOffer()?.let { player.seekTo(it.positionSeconds) } },
+                onStay = { progress.dismissOffer(playing.positionSeconds) },
+            )
         }
         nowPlaying?.let { now ->
             NowPlayingBar(

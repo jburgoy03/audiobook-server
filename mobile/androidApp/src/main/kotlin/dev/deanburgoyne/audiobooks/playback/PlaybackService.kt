@@ -19,6 +19,8 @@ import dev.deanburgoyne.audiobooks.api.SessionExpiredException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import dev.deanburgoyne.audiobooks.progress.ProgressSync
 import kotlinx.coroutines.launch
 
 /**
@@ -53,6 +55,17 @@ class PlaybackService : MediaSessionService() {
             .build()
 
         player.addListener(RetryAfterRefresh(player, api))
+
+        val app = application as AudiobooksApplication
+        player.addListener(ReportProgress(player, app.progress))
+        // Media3 doesn't announce the position ticking along; while playing, save it
+        // every 30 s so a crash or a killed process loses at most that.
+        scope.launch {
+            while (true) {
+                delay(ProgressSync.ReportIntervalMillis)
+                if (player.isPlaying) player.bookPosition()?.let { app.progress.report(it.bookId, it.positionSeconds) }
+            }
+        }
 
         session = MediaSession.Builder(this, player)
             .setBitmapLoader(CacheBitmapLoader(DataSourceBitmapLoader.Builder(this).setDataSourceFactory(dataSource).build()))
@@ -95,6 +108,37 @@ class PlaybackService : MediaSessionService() {
                     // Offline mid-refresh: leave the error showing; play retries.
                 }
             }
+        }
+    }
+
+    /**
+     * Progress lives here rather than in the UI: audio plays for hours with the app
+     * closed, and this service is what's guaranteed to be alive while it does. Play
+     * reconciles with the server; pause, a seek and the end of the book save at once.
+     */
+    private class ReportProgress(private val player: ExoPlayer, private val sync: ProgressSync) : Player.Listener {
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            val at = player.bookPosition() ?: return
+            if (isPlaying) sync.started(at.bookId, at.positionSeconds)
+            // Not playing also covers buffering stalls; a repeat position is skipped.
+            else if (player.playbackState != Player.STATE_ENDED) sync.report(at.bookId, at.positionSeconds)
+        }
+
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int,
+        ) {
+            // A seek (a skip, a chapter, a jump): save where it landed. Moving on to the
+            // next file by itself isn't news.
+            if (reason != Player.DISCONTINUITY_REASON_SEEK) return
+            player.bookPosition()?.let { sync.report(it.bookId, it.positionSeconds) }
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState != Player.STATE_ENDED) return
+            // The last file ran out: the book is finished, everywhere.
+            player.bookPosition()?.let { sync.report(it.bookId, it.durationSeconds, isFinished = true) }
         }
     }
 
