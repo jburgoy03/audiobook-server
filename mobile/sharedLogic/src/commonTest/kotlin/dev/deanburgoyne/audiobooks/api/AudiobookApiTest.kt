@@ -212,3 +212,25 @@ class LibraryTest {
         assertEquals("$Server/api/books/b1/cover?size=640", api.coverUrl("b1", 640))
     }
 }
+
+class StreamAuthTest {
+    @Test
+    fun a_player_gets_the_header_only_for_its_own_server() {
+        val api = api(signedIn()) { error("no request expected") }
+        assertEquals("Bearer access-1", api.authorizationFor(api.streamUrl("b1", 0)))
+        assertNull(api.authorizationFor("https://elsewhere.test/a.mp3"))
+    }
+
+    @Test
+    fun a_stale_401_from_a_player_refreshes_once() = runTest {
+        val store = signedIn()
+        var refreshes = 0
+        val api = api(store) { refreshes++; json(tokens(2)) }
+
+        api.refreshAfterUnauthorized("Bearer access-1")
+        api.refreshAfterUnauthorized("Bearer access-1") // a second stream, same stale token
+
+        assertEquals(1, refreshes)
+        assertEquals("Bearer access-2", api.authorizationFor(api.streamUrl("b1", 0)))
+    }
+}

@@ -97,7 +97,7 @@ class AudiobookApi(
             val ownServer = session != null && request.url.buildString().startsWith(session.serverUrl + "/")
             if (request.attributes.contains(Anonymous) || !ownServer) return@intercept execute(request)
 
-            val sent = session!!.tokens ?: throw SessionExpiredException()
+            val sent = session.tokens ?: throw SessionExpiredException()
             request.headers[HttpHeaders.Authorization] = "Bearer ${sent.accessToken}"
             val first = execute(request)
             if (first.response.status != HttpStatusCode.Unauthorized) return@intercept first
@@ -197,6 +197,31 @@ class AudiobookApi(
      */
     fun coverUrl(bookId: String, size: Int? = null): String =
         api("books/$bookId/cover") + (size?.let { "?size=$it" } ?: "")
+
+    /** One file of a book, by sequence. Range requests supported; needs [authorizationFor]. */
+    fun streamUrl(bookId: String, sequence: Int): String = api("books/$bookId/files/$sequence/stream")
+
+    /**
+     * The Authorization header for a request a media player makes itself (it can't go
+     * through [httpClient]), or null if [url] isn't on the signed-in server, the same
+     * scoping the interceptor applies.
+     */
+    fun authorizationFor(url: String): String? {
+        val session = store.load() ?: return null
+        if (!url.startsWith(session.serverUrl + "/")) return null
+        return session.tokens?.let { "Bearer ${it.accessToken}" }
+    }
+
+    /**
+     * A media player got a 401 sending [sentAuthorization]: refresh, unless that's
+     * already happened since (single-flight, shared with every other request). Then
+     * the player retries with [authorizationFor]. Throws SessionExpiredException if the
+     * refresh is refused.
+     */
+    suspend fun refreshAfterUnauthorized(sentAuthorization: String?) {
+        val current = store.load()?.tokens ?: throw SessionExpiredException()
+        if (sentAuthorization == "Bearer ${current.accessToken}") refresh(stale = current)
+    }
 
     private fun api(path: String): String =
         "${(store.load() ?: throw SessionExpiredException()).serverUrl}/api/$path"

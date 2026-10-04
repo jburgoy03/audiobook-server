@@ -12,6 +12,7 @@ import coil3.ImageLoader
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import dev.deanburgoyne.audiobooks.api.AudiobookApi
 import dev.deanburgoyne.audiobooks.library.LibraryHost
+import dev.deanburgoyne.audiobooks.playback.BookPlayer
 import dev.deanburgoyne.audiobooks.session.ChangePasswordScreen
 import dev.deanburgoyne.audiobooks.session.ChooseServerScreen
 import dev.deanburgoyne.audiobooks.session.LocalNetworkPermission
@@ -28,6 +29,7 @@ import dev.deanburgoyne.audiobooks.session.UnreachableScreen
 @Composable
 fun App(
     api: AudiobookApi,
+    player: BookPlayer,
     localNetwork: LocalNetworkPermission = NoLocalNetworkPermission,
     // Separate from [localNetwork] so the view model, which outlives activities, holds
     // only a check (application context), never the activity's permission launcher.
@@ -60,7 +62,11 @@ fun App(
                 is SessionScreen.ChooseServer -> ChooseServerScreen(s, onSubmit = session::submitServer)
                 is SessionScreen.SignIn -> SignInScreen(s, onSubmit = session::signIn, onChangeServer = session::chooseServer)
                 is SessionScreen.ChangePassword -> ChangePasswordScreen(s, onSubmit = session::changePassword, onSignOut = session::signOut)
-                is SessionScreen.SignedIn -> LibraryHost(api, onSignOut = session::signOut)
+                is SessionScreen.SignedIn -> LibraryHost(api, player, onSignOut = {
+                    // Signing out stops a book this account was playing.
+                    player.stop()
+                    session.signOut()
+                })
             }
         }
     }

@@ -4,6 +4,8 @@ import android.app.Application
 import dev.deanburgoyne.audiobooks.api.AndroidSessionStore
 import dev.deanburgoyne.audiobooks.api.AudiobookApi
 import dev.deanburgoyne.audiobooks.api.platformHttpEngine
+import dev.deanburgoyne.audiobooks.playback.AndroidBookPlayer
+import dev.deanburgoyne.audiobooks.playback.BookPlayer
 
 /**
  * One API client for the whole process: activities come and go (rotation, the system
@@ -13,4 +15,7 @@ import dev.deanburgoyne.audiobooks.api.platformHttpEngine
  */
 class AudiobooksApplication : Application() {
     val api: AudiobookApi by lazy { AudiobookApi(platformHttpEngine(), AndroidSessionStore(this)) }
+
+    /** Connects to the playback service on first use (the UI's first frame). */
+    val player: BookPlayer by lazy { AndroidBookPlayer(this, api) }
 }

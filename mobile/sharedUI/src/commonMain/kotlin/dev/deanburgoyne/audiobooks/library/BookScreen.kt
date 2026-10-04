@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.deanburgoyne.audiobooks.api.BookDetail
 import dev.deanburgoyne.audiobooks.api.Progress
+import dev.deanburgoyne.audiobooks.playback.NowPlaying
 import dev.deanburgoyne.audiobooks.ui.formatDuration
 import dev.deanburgoyne.audiobooks.ui.formatRemaining
 
@@ -40,9 +41,12 @@ import dev.deanburgoyne.audiobooks.ui.formatRemaining
 fun BookScreen(
     state: BookState,
     progress: Progress?,
+    nowPlaying: NowPlaying?,
     coverUrl: (BookDetail) -> String?,
     onBack: () -> Unit,
     onRetry: () -> Unit,
+    onPlay: (BookDetail, startAt: Double) -> Unit,
+    onToggle: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -60,14 +64,21 @@ fun BookScreen(
                     Text(state.message, color = MaterialTheme.colorScheme.error)
                     TextButton(onClick = onRetry) { Text("Try again") }
                 }
-                is BookState.Loaded -> BookDetails(state.book, progress, coverUrl(state.book))
+                is BookState.Loaded -> BookDetails(state.book, progress, nowPlaying?.takeIf { it.bookId == state.book.id }, coverUrl(state.book), onPlay, onToggle)
             }
         }
     }
 }
 
 @Composable
-private fun BookDetails(book: BookDetail, progress: Progress?, coverUrl: String?) {
+private fun BookDetails(
+    book: BookDetail,
+    progress: Progress?,
+    playing: NowPlaying?,
+    coverUrl: String?,
+    onPlay: (BookDetail, Double) -> Unit,
+    onToggle: () -> Unit,
+) {
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -99,9 +110,21 @@ private fun BookDetails(book: BookDetail, progress: Progress?, coverUrl: String?
         }
 
         item {
-            // Playback is A3; the button is here so the layout is settled.
-            Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
-                Text(if (progress != null && !progress.isFinished) "Resume" else "Play")
+            // This book already loaded: the button is play/pause, and the player's own
+            // position wins over the server's (it's newer). Otherwise start from the
+            // server's position, or from the beginning if it's finished.
+            val resumeAt = progress?.takeIf { !it.isFinished }?.positionSeconds
+            Button(
+                onClick = { if (playing != null) onToggle() else onPlay(book, resumeAt ?: 0.0) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    when {
+                        playing?.isPlaying == true -> "Pause"
+                        playing != null || resumeAt != null -> "Resume"
+                        else -> "Play"
+                    }
+                )
             }
         }
 
