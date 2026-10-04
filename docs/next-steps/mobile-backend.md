@@ -84,7 +84,12 @@ their next scan, from stored files (no re-probe); `null` until then means unknow
   the app keeps the timeline number. If a re-encode moved chapter boundaries, the
   position is approximately right, not exactly (flag it, don't solve it).
 
-### B3 — Cover thumbnails
+### B3 — Cover thumbnails — done 2026-10-04
+
+Built as planned, made on first request rather than at scan time (no rescan needed,
+scans stay fast), at most two ffmpeg processes at once, cleared when a book's cover is
+replaced. Smaller originals are served as they are; a failed thumbnail falls back to
+the original.
 
 - `GET /api/books/{id}/cover?size=` with a small fixed set (e.g. 200, 400, 800) so
   the cache can't be filled with arbitrary sizes. Resized once with the ffmpeg

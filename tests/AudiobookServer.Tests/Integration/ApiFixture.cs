@@ -50,6 +50,9 @@ public sealed class ApiFixture : IAsyncLifetime
 
     private string CoversDirectory => Path.Combine(_root, "covers");
 
+    /// <summary>Where the cover of a book made with withCover is stored, to replace it with a real image.</summary>
+    public string StoredCoverPath(Guid bookId) => Path.Combine(CoversDirectory, $"{bookId}.jpg");
+
     /// <summary>The fixture's original library. Private, as every library is by default.</summary>
     public Guid PrivateLibraryId { get; private set; }
 

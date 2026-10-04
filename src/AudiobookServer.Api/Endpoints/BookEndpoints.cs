@@ -65,10 +65,18 @@ public static class BookEndpoints
         .Produces<BookDetailDto>()
         .Produces(StatusCodes.Status404NotFound);
 
+        // ?size= gives a thumbnail no larger than that on its longest side (320, 640 or
+        // 1080), for phones; without it, the original. A thumbnail that can't be made
+        // falls back to the original rather than failing the image.
         app.MapGet("/api/books/{id:guid}/cover", async (
-            Guid id, ClaimsPrincipal principal, AudiobookDbContext db, ICoverStore covers,
+            Guid id, int? size, ClaimsPrincipal principal, AudiobookDbContext db, ICoverStore covers,
             HttpContext http, CancellationToken ct) =>
         {
+            if (size is { } requested && !CoverThumbnails.Sizes.Contains(requested))
+                return Results.Problem(
+                    $"size must be one of {string.Join(", ", CoverThumbnails.Sizes)}.",
+                    statusCode: StatusCodes.Status400BadRequest);
+
             var coverPath = await db.VisibleBooks(principal)
                 .Where(b => b.Id == id)
                 .Select(b => b.CoverPath)
@@ -77,6 +85,9 @@ public static class BookEndpoints
             var fullPath = coverPath is null ? null : covers.Resolve(coverPath);
             if (fullPath is null || !File.Exists(fullPath))
                 return Results.NotFound();
+
+            if (size is { } wanted)
+                fullPath = await covers.ThumbnailAsync(coverPath!, wanted, ct) ?? fullPath;
 
             var info = new FileInfo(fullPath);
             var etag = new Microsoft.Net.Http.Headers.EntityTagHeaderValue(
