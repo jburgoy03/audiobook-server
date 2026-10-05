@@ -1463,3 +1463,145 @@ button { -webkit-user-select: none; user-select: none; }
   .search-toggle:hover { color: var(--ink); background: var(--hover-tint); }
   .chip[aria-pressed='true']:not(:disabled):hover { background: var(--ink); opacity: 0.88; }
 }
+
+/* ---------- Sidebar ---------- */
+
+/*
+  Wide screens, signed in: the page becomes a sidebar and a main column using
+  the whole window, rather than one centred frame. The sidebar holds the
+  wordmark, the library's views (the status filter as one choice) and the
+  account links; the masthead keeps only the library's search and sort, and
+  disappears on pages with nothing in it. The library's grid widens with the
+  window (4, 6, then 8 tracks); the book and admin pages keep the frame's width,
+  since a player or a form gains nothing from 1600px.
+
+  Narrower screens keep everything as it was: no sidebar, masthead links, the
+  search button and band with chips.
+*/
+.sidebar { display: none; }
+.continue-next-head { display: none; }
+
+@media (min-width: 64em) {
+  .shell[data-sidebar] {
+    display: grid;
+    grid-template-columns: 16rem minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    height: 100dvh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 2.25rem;
+    padding: 1.5rem 1.25rem 1.5rem 2rem;
+    border-right: 1px solid var(--rule);
+    overflow-y: auto;
+  }
+  /* The ribbon hangs from the top edge on the sidebar's text line. */
+  .sidebar .wordmark { position: relative; align-self: flex-start; margin-left: 0.75rem; }
+  .sidebar .ribbon-mark { top: -1.5rem; height: calc(1.5rem + 1.375rem * 0.95); }
+  /* Clear of the now-playing bar. */
+  body:has(.now-bar) .sidebar { padding-bottom: 6.5rem; }
+
+  .sidebar-group { display: grid; gap: 0.15rem; }
+  .sidebar-label { padding: 0 0.75rem 0.4rem; color: var(--muted); font-size: 0.9375rem; font-style: italic; }
+  .sidebar-link {
+    display: block;
+    padding: 0.45rem 0.75rem;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--release) var(--ease-out), color var(--release) var(--ease-out);
+  }
+  /* The current view: a raised row, bone rather than red (red means position). */
+  .sidebar-link[aria-current='page'] { background: var(--hover-tint); }
+  .sidebar-link:active { background: var(--press-tint); transition-duration: var(--press); }
+  .sidebar-quiet { color: var(--muted); font-style: italic; }
+  .sidebar-account { margin-top: auto; display: grid; gap: 0.15rem; }
+
+  /* The main column: the frame becomes the column, edge to edge with a gutter. */
+  .shell[data-sidebar] .shell-main .frame { width: auto; margin-inline: clamp(1.5rem, 3vw, 3.5rem); }
+  .shell[data-sidebar] .now-bar .frame { width: auto; margin-inline: 2rem; }
+
+  /* The masthead is the main column's top bar: search and sort only. */
+  .shell[data-sidebar] .masthead .wordmark,
+  .shell[data-sidebar] .masthead-nav,
+  .shell[data-sidebar] .search-toggle,
+  .shell[data-sidebar] .library-status { display: none; }
+  .shell[data-sidebar] .masthead:not(:has(.library-toolbar)) { display: none; }
+  .shell[data-sidebar] .library-toolbar,
+  .shell[data-sidebar] .library-toolbar:not([data-open]) {
+    grid-area: 1 / 1 / 2 / -1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2rem;
+    margin-block: -0.5rem;
+    padding: 0;
+  }
+  .shell[data-sidebar] .library-search { flex: 0 1 40rem; width: auto; font-size: 1.125rem; padding: 0.35rem 0; }
+  .shell[data-sidebar] .library-filters { flex: none; }
+
+  /* Book and admin pages keep the frame's width inside the wider column. */
+  .shell[data-sidebar] .app:not(:has(> .shelf)) { max-width: var(--frame); }
+
+  /* The library: tracks follow the column's width. Even counts, since a
+     Continue listening item takes two. */
+  .app:has(> .shelf) { --cols: 4; }
+}
+
+@media (min-width: 80em) {
+  .app:has(> .shelf) { --cols: 6; }
+
+  /* Continue listening: the feature on the left, the rest beside it as a list. */
+  .continue-shelf {
+    display: grid;
+    grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr);
+    /* The list spans both rows; its extra height goes to the feature's row,
+       not the heading's, so the feature stays under its heading. */
+    grid-template-rows: auto 1fr;
+    column-gap: 3.5rem;
+    align-items: start;
+  }
+  .continue-shelf > .section-head { grid-column: 1; }
+  .continue-shelf > .feature { grid-column: 1; --cols: 6; }
+  /* Only one book in progress: nothing to list beside it, so it takes the row. */
+  .continue-shelf:not(:has(.continue-next)) { display: block; }
+  .continue-next { grid-column: 2; grid-row: 1 / span 2; display: grid; align-content: start; }
+  .continue-next-head {
+    display: block;
+    margin: 0 0 1.5rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--rule);
+    font-size: 1.5rem;
+    font-style: italic;
+    font-weight: 400;
+    line-height: inherit;
+  }
+  .continue-next .continue-list { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: 1.25rem; margin-top: 0; }
+  .continue-next .continue-list > li {
+    grid-column: auto;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    column-gap: 1.25rem;
+    align-items: center;
+  }
+  .continue-next .continue-item { align-self: center; }
+  .continue-next .continue-play-disc { width: 2.25rem; height: 2.25rem; }
+}
+
+@media (min-width: 110em) {
+  .app:has(> .shelf) { --cols: 8; }
+}
+
+@media (min-width: 64em) and (hover: hover) {
+  .sidebar-link:hover { background: var(--hover-tint); }
+  .sidebar-quiet:hover { color: var(--ink); }
+}

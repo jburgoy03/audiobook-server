@@ -371,7 +371,7 @@ export function LibraryPage() {
       )}
 
       {!filtering && featured && (
-        <section className="shelf" aria-labelledby="continue-heading">
+        <section className="shelf continue-shelf" aria-labelledby="continue-heading">
           <div className="section-head">
             <h2 id="continue-heading">Continue listening</h2>
           </div>
@@ -381,12 +381,17 @@ export function LibraryPage() {
             savedPosition={progress.get(featured.id)?.position ?? 0}
           />
 
+          {/* Under the feature, or beside it as "Up next" when the sidebar layout
+              leaves room (see "Sidebar" in index.css). */}
           {others.length > 0 && (
-            <ul className="shelf-list continue-list continue-more grid">
-              {others.map((b) => (
-                <ContinueItem key={b.id} book={b} progress={progress.get(b.id)!} />
-              ))}
-            </ul>
+            <div className="continue-next">
+              <h3 className="continue-next-head">Up next</h3>
+              <ul className="shelf-list continue-list continue-more grid">
+                {others.map((b) => (
+                  <ContinueItem key={b.id} book={b} progress={progress.get(b.id)!} />
+                ))}
+              </ul>
+            </div>
           )}
         </section>
       )}
