@@ -205,7 +205,7 @@ export function Player({ book }: { book: BookDetail }) {
             </button>
           </div>
 
-          <label className="speed">
+          <label className="speed picker">
             <span>Speed</span>
             <select value={p.rate} onChange={(e) => p.setRate(Number(e.target.value))}>
               {RATES.map((r) => (

@@ -3,6 +3,7 @@ import { logout, useAuth } from './auth/auth'
 import { LoginPage } from './auth/LoginPage'
 import { PassphrasePage } from './auth/PassphrasePage'
 import { NowPlayingBar } from './components/NowPlayingBar'
+import { LibrarySearch } from './library/LibraryToolbar'
 import { AdminPage } from './pages/AdminPage'
 import { BookPage } from './pages/BookPage'
 import { LibraryPage } from './pages/LibraryPage'
@@ -22,6 +23,7 @@ export default function App() {
           <span className="ribbon-mark" aria-hidden="true" />
           Audiobooks
         </Link>
+        {signedIn && <LibrarySearch />}
         {(signedIn || auth.status === 'mustChangePassword') && (
           <nav className="masthead-nav">
             {/* Convenience only: the server enforces admin on every admin route. */}

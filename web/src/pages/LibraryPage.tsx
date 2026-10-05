@@ -4,6 +4,8 @@ import { api } from '../api/client'
 import type { BookDetail, BookSummary } from '../api/types'
 import { Cover } from '../components/Cover'
 import { PlayPauseIcon } from '../components/Icons'
+import { isFiltering, useLibraryQuery } from '../library/libraryQuery'
+import { bookStatus, compareBooks, matchesQuery } from '../library/search'
 import { ChapterTimeline } from '../player/ChapterTimeline'
 import { useActivate, useActiveBookId, useLivePlayer } from '../player/nowPlaying'
 import { progressStore, useProgressEntries } from '../player/progress'
@@ -24,20 +26,19 @@ interface Progress {
   lastActivity: string
 }
 
-// A display rule, not sync state: a book counts as started after a minute.
-// Finished is the server's IsFinished, set when a book plays to its end.
-// Neither applies to the active book, which is always first (see LibraryPage).
-const STARTED_AFTER_SECONDS = 60
-
 // The featured book plus up to three more, which fills one row of the
 // six-column grid (each takes two columns).
 const MAX_IN_PROGRESS = 4
 
-/** Where this browser would resume the book: the same point Resume plays from. */
+/**
+ * Where this browser would resume the book (the same point Resume plays from), if
+ * it's in progress by bookStatus, the rule the status filter uses too. It doesn't
+ * decide the active book, which is always first (see LibraryPage).
+ */
 function progressFor(book: BookSummary): Progress | null {
   const point = progressStore.resumePoint(book.id)
   if (!point || book.durationSeconds <= 0) return null
-  if (point.isFinished || point.position < STARTED_AFTER_SECONDS) return null
+  if (bookStatus(point) !== 'inProgress') return null
   return {
     position: point.position,
     fraction: point.position / book.durationSeconds,
@@ -319,6 +320,23 @@ export function LibraryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [books, inProgress, entries])
 
+  // Search, sort and filters, from the URL. While anything narrows the list, the
+  // shelves above it step aside, so results start at the top of the page.
+  const [query, setQuery] = useLibraryQuery()
+  const filtering = isFiltering(query)
+  const shown = useMemo(() => {
+    const statuses = query.statuses
+    return (books ?? [])
+      .filter(
+        (b) =>
+          matchesQuery(b, query.q) &&
+          (statuses.length === 0 || statuses.includes(bookStatus(progressStore.resumePoint(b.id)))),
+      )
+      .sort(compareBooks(query.sort))
+    // resumePoint reads the store, whose snapshot is `entries`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [books, query, entries])
+
   if (error) {
     return (
       <p className="notice">
@@ -343,7 +361,7 @@ export function LibraryPage() {
 
   return (
     <>
-      {!featured && newest && (
+      {!filtering && !featured && newest && (
         <section className="shelf" aria-labelledby="newest-heading">
           <div className="section-head">
             <h2 id="newest-heading">Newly added</h2>
@@ -352,7 +370,7 @@ export function LibraryPage() {
         </section>
       )}
 
-      {featured && (
+      {!filtering && featured && (
         <section className="shelf" aria-labelledby="continue-heading">
           <div className="section-head">
             <h2 id="continue-heading">Continue listening</h2>
@@ -375,13 +393,28 @@ export function LibraryPage() {
 
       <section className="shelf" aria-labelledby="all-heading">
         <div className="section-head">
-          <h2 id="all-heading">All books</h2>
-          <span className="section-count">
-            {books.length} {books.length === 1 ? 'book' : 'books'}, {formatLength(totalSeconds)}
+          <h2 id="all-heading">{filtering ? 'Results' : 'All books'}</h2>
+          {/* Announced as it changes, so a screen reader hears the count while typing. */}
+          <span className="section-count" aria-live="polite">
+            {filtering
+              ? `${shown.length} of ${books.length} ${books.length === 1 ? 'book' : 'books'}`
+              : `${books.length} ${books.length === 1 ? 'book' : 'books'}, ${formatLength(totalSeconds)}`}
           </span>
         </div>
+        {shown.length === 0 && (
+          <div className="library-empty">
+            <p>
+              {query.q.trim() !== ''
+                ? `No books match “${query.q.trim()}”${query.statuses.length > 0 ? ' with these filters' : ''}.`
+                : 'No books match these filters.'}
+            </p>
+            <button type="button" className="pill" onClick={() => setQuery({ q: '', statuses: [] })}>
+              Clear
+            </button>
+          </div>
+        )}
         <ul className="shelf-list grid">
-          {books.map((b) => (
+          {shown.map((b) => (
             <li key={b.id}>
               <Link to={`/books/${b.id}`} className="book-tile">
                 {b.id === activeId ? (

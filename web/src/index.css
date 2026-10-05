@@ -638,7 +638,7 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
 /* Chrome counts a click on a slider or select as focus-visible; after a pointer
    press, no ring (main.tsx sets data-input). The keyboard still gets one. */
 :root[data-input='pointer'] .timeline:has(.timeline-input:focus-visible) { outline: none; }
-:root[data-input='pointer'] .speed select:focus-visible { outline: none; }
+:root[data-input='pointer'] .picker select:focus-visible { outline: none; }
 
 /* A thin bar: chapter segments laid end to end, read like a ruler. */
 .timeline-track {
@@ -760,8 +760,9 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
   color: var(--page);
 }
 
-.speed { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--muted); }
-.speed select {
+/* A labelled select: the player's speed, the library's sort. */
+.picker { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--muted); }
+.picker select {
   padding: 0.25rem 0.5rem;
   border: 1px solid var(--rule);
   border-radius: 6px;
@@ -777,10 +778,10 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
   picker (on iOS, the system wheel).
 */
 @supports (appearance: base-select) {
-  .speed select,
-  .speed select::picker(select) { appearance: base-select; }
+  .picker select,
+  .picker select::picker(select) { appearance: base-select; }
 
-  .speed select {
+  .picker select {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -788,10 +789,10 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
     padding: 0.3rem 0.6rem 0.3rem 0.7rem;
     cursor: pointer;
   }
-  .speed select:open { outline: none; border-color: var(--muted); }
+  .picker select:open { outline: none; border-color: var(--muted); }
 
   /* A small chevron that turns over while the list is open. */
-  .speed select::picker-icon {
+  .picker select::picker-icon {
     content: '';
     width: 0.4rem;
     height: 0.4rem;
@@ -801,11 +802,11 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
     transform: translateY(-25%) rotate(45deg);
     transition: transform var(--release) var(--ease-out);
   }
-  .speed select:open::picker-icon { transform: translateY(25%) rotate(225deg); }
+  .picker select:open::picker-icon { transform: translateY(25%) rotate(225deg); }
 
   /* The list: right-aligned under the control (which sits on the right edge),
      flipping above it if there's no room below. */
-  .speed select::picker(select) {
+  .picker select::picker(select) {
     position-area: block-end span-inline-start;
     position-try-fallbacks: flip-block;
     min-width: anchor-size(width);
@@ -823,10 +824,10 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
       translate 120ms var(--ease-out);
   }
   @starting-style {
-    .speed select:open::picker(select) { opacity: 0; translate: 0 -4px; }
+    .picker select:open::picker(select) { opacity: 0; translate: 0 -4px; }
   }
 
-  .speed option {
+  .picker option {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -836,13 +837,13 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
     cursor: pointer;
     transition: background-color var(--release) var(--ease-out);
   }
-  .speed option::checkmark { content: '✓'; color: var(--ink); width: 0.9em; }
-  .speed option:not(:checked)::checkmark { visibility: hidden; }
-  .speed option:checked { font-weight: 600; }
-  .speed option:focus-visible { outline: none; background: var(--hover-tint); }
-  .speed option:active { background: var(--press-tint); transition-duration: var(--press); }
+  .picker option::checkmark { content: '✓'; color: var(--ink); width: 0.9em; }
+  .picker option:not(:checked)::checkmark { visibility: hidden; }
+  .picker option:checked { font-weight: 600; }
+  .picker option:focus-visible { outline: none; background: var(--hover-tint); }
+  .picker option:active { background: var(--press-tint); transition-duration: var(--press); }
   @media (hover: hover) {
-    .speed option:hover { background: var(--hover-tint); }
+    .picker option:hover { background: var(--hover-tint); }
   }
 }
 
@@ -985,7 +986,16 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
 /* ---------- Sign in, sign out ---------- */
 
 /* The wordmark on the frame's left edge, sign out on its right. */
-.masthead { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+/* Wordmark left, nav right, and between them whatever the page puts in the
+   masthead (the library's search). The middle column takes the slack. */
+.masthead {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 1.5rem;
+}
+.wordmark { grid-area: 1 / 1; }
+.masthead-nav { grid-area: 1 / 3; }
 
 .signout {
   padding: 0.2rem 0;
@@ -1141,7 +1151,7 @@ button { -webkit-user-select: none; user-select: none; }
 .back { transition: color var(--release) var(--ease-out), opacity var(--release) var(--ease-out); }
 .back:active { opacity: 0.55; transition-duration: var(--press); }
 
-.speed select { cursor: pointer; transition: border-color var(--release) var(--ease-out); }
+.picker select { cursor: pointer; transition: border-color var(--release) var(--ease-out); }
 
 /* Timeline: the bar thickens under the pointer, and a little more while
    dragging, so it's clear the bar is grabbable and grabbed. */
@@ -1172,7 +1182,7 @@ button { -webkit-user-select: none; user-select: none; }
   .chapter:active { background: var(--press-tint); }
 
   .back:hover { color: var(--ink); }
-  .speed select:hover { border-color: var(--muted); }
+  .picker select:hover { border-color: var(--muted); }
   .timeline:not(.timeline-static):hover .timeline-track { inset: 15px 0; }
   .timeline:has(.timeline-input:active) .timeline-track { inset: 14px 0; }
 }
@@ -1182,7 +1192,7 @@ button { -webkit-user-select: none; user-select: none; }
   /* Keep the tints (they aren't motion); drop movement, morphing and scaling. */
   .control, .resume, .book-tile .cover, .continue-cover .cover, .feature-cover .cover,
   .timeline-track, .pp-half, .skip-arc,
-  .speed select::picker(select), .speed select::picker-icon { transition: none; }
+  .picker select::picker(select), .picker select::picker-icon { transition: none; }
   .control:active, .resume:active, .control-play:active,
   .book-tile:active .cover, .continue-cover:active .cover, .feature-cover:active .cover,
   .control:active .skip-arc { transform: none !important; }
@@ -1345,4 +1355,111 @@ button { -webkit-user-select: none; user-select: none; }
 @media (prefers-reduced-motion: reduce) {
   .pill { transition: none; }
   .pill:active { transform: none !important; }
+}
+
+/* ---------- Library search ---------- */
+
+/*
+  In the masthead, on the library page only. Wide screens: search, status chips
+  and sort in the middle of the masthead row, centred, always shown. Narrower:
+  a search button beside the nav opens them as a band under the row, the search
+  line across the frame and the chips and sort below it.
+
+  The controls are taller than the wordmark. On a wide screen they're centred
+  on the row and given negative margins, so the masthead keeps its height and
+  the ribbon still ends under the wordmark.
+
+  Chips are the admin's pills; a pressed chip is filled bone, never red, since
+  red only means a position.
+*/
+.search-toggle {
+  grid-area: 1 / 2;
+  justify-self: end;
+  align-self: center;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin-block: -0.5rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color var(--release) var(--ease-out), background-color var(--release) var(--ease-out);
+}
+.search-toggle[aria-expanded='true'] { color: var(--ink); }
+.search-toggle:active { background: var(--press-tint); transition-duration: var(--press); }
+/* Filters still apply with the band closed. */
+.search-toggle-dot {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.35rem;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.library-toolbar { grid-area: 2 / 1 / 3 / -1; display: grid; gap: 1rem; padding-top: 1.25rem; }
+.library-toolbar:not([data-open]) { display: none; }
+
+.library-search {
+  width: 100%;
+  padding: 0.4rem 0 0.45rem;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.25rem;
+  outline: none;
+  transition: border-color var(--release) var(--ease-out);
+}
+.library-search::placeholder { color: var(--faint); font-style: italic; }
+.library-search:focus { border-bottom-color: var(--ink); }
+.library-search::-webkit-search-cancel-button { filter: invert(1) opacity(0.5); cursor: pointer; }
+
+.library-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+}
+.library-status { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.chip[aria-pressed='true'] { border-color: var(--ink); background: var(--ink); color: var(--page); }
+.chip[aria-pressed='true']:not(:disabled):active { background: var(--ink); opacity: 0.8; }
+
+/* Wide enough for wordmark, search, chips, sort and nav on one row. In em, so
+   it follows the browser's font size, as the controls do. */
+@media (min-width: 75em) {
+  .search-toggle { display: none; }
+  .library-toolbar,
+  .library-toolbar:not([data-open]) {
+    grid-area: 1 / 2;
+    align-self: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1.5rem;
+    margin-block: -0.75rem;
+    padding: 0;
+  }
+  .library-search { width: 15rem; font-size: 1.0625rem; padding: 0.3rem 0; }
+  .library-filters,
+  .library-status { flex-wrap: nowrap; }
+  .library-filters { gap: 1.5rem; }
+  .library-status .chip { padding: 0.25rem 0.75rem; }
+}
+
+.library-empty { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 1rem; }
+.library-empty p { margin: 0; font-size: 1.125rem; font-style: italic; }
+
+@media (hover: hover) {
+  .search-toggle:hover { color: var(--ink); background: var(--hover-tint); }
+  .chip[aria-pressed='true']:not(:disabled):hover { background: var(--ink); opacity: 0.88; }
 }

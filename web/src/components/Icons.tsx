@@ -120,6 +120,17 @@ export const VolumeIcon = ({ level, muted, size = 22 }: IconProps & { level: num
 
 export const BackIcon = ({ size = 18 }: IconProps) => icon(size, <path d="M14.5 6 L8.5 12 L14.5 18" />)
 
+export const SearchIcon = ({ size = 20 }: IconProps) =>
+  icon(
+    size,
+    <>
+      <circle cx="10.5" cy="10.5" r="5.5" />
+      <path d="M14.5 14.5 L19 19" />
+    </>,
+  )
+
+export const CloseIcon = ({ size = 20 }: IconProps) => icon(size, <path d="M6.5 6.5 L17.5 17.5 M17.5 6.5 L6.5 17.5" />)
+
 /**
  * Three small bars that rise and fall while audio plays: shown on the current
  * chapter, so the list says "this is playing", not just "you are here". Still
