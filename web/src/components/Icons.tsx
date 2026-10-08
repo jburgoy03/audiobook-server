@@ -131,6 +131,30 @@ export const SearchIcon = ({ size = 20 }: IconProps) =>
 
 export const CloseIcon = ({ size = 20 }: IconProps) => icon(size, <path d="M6.5 6.5 L17.5 17.5 M17.5 6.5 L6.5 17.5" />)
 
+/** The library as covers: four rounded squares. */
+export const GridIcon = ({ size = 20 }: IconProps) =>
+  icon(
+    size,
+    <>
+      <rect x="5" y="5" width="5.5" height="5.5" rx="1" />
+      <rect x="13.5" y="5" width="5.5" height="5.5" rx="1" />
+      <rect x="5" y="13.5" width="5.5" height="5.5" rx="1" />
+      <rect x="13.5" y="13.5" width="5.5" height="5.5" rx="1" />
+    </>,
+  )
+
+/** The library as rows: a small square and a line, three times. */
+export const ListIcon = ({ size = 20 }: IconProps) =>
+  icon(
+    size,
+    <>
+      <rect x="4.5" y="5" width="3.5" height="3.5" rx="0.75" />
+      <rect x="4.5" y="10.25" width="3.5" height="3.5" rx="0.75" />
+      <rect x="4.5" y="15.5" width="3.5" height="3.5" rx="0.75" />
+      <path d="M11 6.75 H19.5 M11 12 H19.5 M11 17.25 H19.5" />
+    </>,
+  )
+
 /**
  * Three small bars that rise and fall while audio plays: shown on the current
  * chapter, so the list says "this is playing", not just "you are here". Still

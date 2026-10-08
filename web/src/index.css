@@ -1360,28 +1360,62 @@ button { -webkit-user-select: none; user-select: none; }
 /* ---------- Library search ---------- */
 
 /*
-  In the masthead, on the library page only. Wide screens: search, status chips
-  and sort in the middle of the masthead row, centred, always shown. Narrower:
-  a search button beside the nav opens them as a band under the row, the search
-  line across the frame and the chips and sort below it.
+  In the masthead, on the library page only, always shown. Below the sidebar
+  breakpoint (64em): a second masthead row with the search line across the
+  frame, then chips and sort on one line that scrolls sideways. The sidebar
+  layout moves it into the top bar (see "Sidebar").
 
-  The controls are taller than the wordmark. On a wide screen they're centred
-  on the row and given negative margins, so the masthead keeps its height and
-  the ribbon still ends under the wordmark.
+  Phones and tablets: the masthead is sticky with a negative top, so the
+  wordmark row scrolls off and the search row stays pinned. --masthead-lead is
+  how much scrolls away: the masthead's top padding, the wordmark row, and the
+  toolbar's top padding, less a little air above the search line. The rows are
+  given fixed heights here so that sum is exact rather than measured.
+  The page colour is painted out to the window's edges (the masthead itself is
+  only frame-wide), so the list doesn't show beside it as it scrolls under.
 
   Chips are the admin's pills; a pressed chip is filled bone, never red, since
-  red only means a position.
+  red only means a position. The search field's text is at least 16px, or iOS
+  zooms the page when it's focused.
 */
-.search-toggle {
-  grid-area: 1 / 2;
-  justify-self: end;
-  align-self: center;
+.library-toolbar { grid-area: 2 / 1 / 3 / -1; display: grid; gap: 0.75rem; padding-top: 1rem; min-width: 0; }
+
+.library-search-field {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border-bottom: 1px solid var(--rule);
+  color: var(--muted);
+  transition: border-color var(--release) var(--ease-out), color var(--release) var(--ease-out);
+}
+.library-search-field:focus-within { border-bottom-color: var(--ink); color: var(--ink); }
+
+.library-search {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem 0 0.45rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.25rem;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.library-search::placeholder { color: var(--faint); font-style: italic; }
+/* The clear button below replaces the native one. */
+.library-search::-webkit-search-cancel-button,
+.library-search::-webkit-search-decoration { -webkit-appearance: none; appearance: none; display: none; }
+
+/* A 44px target drawn as a small cross, at the line's right end. */
+.library-search-clear {
   display: grid;
   place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  margin-block: -0.5rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: -0.5rem -0.75rem -0.5rem 0;
   padding: 0;
   border: none;
   border-radius: 999px;
@@ -1390,78 +1424,126 @@ button { -webkit-user-select: none; user-select: none; }
   cursor: pointer;
   transition: color var(--release) var(--ease-out), background-color var(--release) var(--ease-out);
 }
-.search-toggle[aria-expanded='true'] { color: var(--ink); }
-.search-toggle:active { background: var(--press-tint); transition-duration: var(--press); }
-/* Filters still apply with the band closed. */
-.search-toggle-dot {
-  position: absolute;
-  top: 0.4rem;
-  right: 0.35rem;
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: 50%;
-  background: var(--ink);
-}
-
-.library-toolbar { grid-area: 2 / 1 / 3 / -1; display: grid; gap: 1rem; padding-top: 1.25rem; }
-.library-toolbar:not([data-open]) { display: none; }
-
-.library-search {
-  width: 100%;
-  padding: 0.4rem 0 0.45rem;
-  border: none;
-  border-bottom: 1px solid var(--rule);
-  border-radius: 0;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: 1.25rem;
-  outline: none;
-  transition: border-color var(--release) var(--ease-out);
-}
-.library-search::placeholder { color: var(--faint); font-style: italic; }
-.library-search:focus { border-bottom-color: var(--ink); }
-.library-search::-webkit-search-cancel-button { filter: invert(1) opacity(0.5); cursor: pointer; }
+.library-search-clear:active { background: var(--press-tint); transition-duration: var(--press); }
 
 .library-filters {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
   align-items: center;
-  gap: 0.75rem 1.5rem;
+  gap: 1.25rem;
+  /* One line; what doesn't fit scrolls sideways under the finger. Bled to the
+     window's edges so chips scroll off the screen, not off the frame. */
+  margin-inline: calc(-1 * var(--gutter));
+  padding: 0.1rem var(--gutter);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  /* A fade on the window's right edge says the line goes on (Sort is past it
+     on a phone). It covers only the gutter, so scrolled to the end nothing
+     is faded. */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--gutter)), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--gutter)), transparent);
 }
-.library-status { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.library-filters::-webkit-scrollbar { display: none; }
+.library-status { display: flex; flex: none; gap: 0.5rem; }
+.library-status .chip,
+.library-filters .picker { flex: none; white-space: nowrap; }
+.library-filters .picker { margin-left: auto; }
 .chip[aria-pressed='true'] { border-color: var(--ink); background: var(--ink); color: var(--page); }
 .chip[aria-pressed='true']:not(:disabled):active { background: var(--ink); opacity: 0.8; }
 
-/* Wide enough for wordmark, search, chips, sort and nav on one row. In em, so
-   it follows the browser's font size, as the controls do. */
-@media (min-width: 75em) {
-  .search-toggle { display: none; }
-  .library-toolbar,
-  .library-toolbar:not([data-open]) {
-    grid-area: 1 / 2;
-    align-self: center;
-    display: flex;
-    justify-content: center;
+@media (max-width: 63.99em) {
+  .masthead:has(.library-toolbar) {
+    --masthead-lead: calc(1.5rem + 1.75rem + 1rem - 0.6rem);
+    position: sticky;
+    top: calc(-1 * var(--masthead-lead));
+    z-index: 20;
+    grid-template-rows: 1.75rem auto;
     align-items: center;
-    gap: 1.5rem;
-    margin-block: -0.75rem;
-    padding: 0;
+    padding-bottom: 0.75rem;
+    background: var(--page);
+    box-shadow: 0 0 0 100vmax var(--page);
+    clip-path: inset(0 -100vmax);
   }
-  .library-search { width: 15rem; font-size: 1.0625rem; padding: 0.3rem 0; }
-  .library-filters,
-  .library-status { flex-wrap: nowrap; }
-  .library-filters { gap: 1.5rem; }
-  .library-status .chip { padding: 0.25rem 0.75rem; }
 }
 
 .library-empty { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 1rem; }
 .library-empty p { margin: 0; font-size: 1.125rem; font-style: italic; }
 
 @media (hover: hover) {
-  .search-toggle:hover { color: var(--ink); background: var(--hover-tint); }
+  .library-search-clear:hover { color: var(--ink); background: var(--hover-tint); }
   .chip[aria-pressed='true']:not(:disabled):hover { background: var(--ink); opacity: 0.88; }
+}
+
+/* ---------- Library list ---------- */
+
+/*
+  The All books section as rows instead of covers: a small cover, title and
+  author, and the length on the right edge. The same link markup as a tile,
+  rearranged, so both layouts share one component. Rows are ruled like the
+  chapter list, and the whole row is the link.
+
+  Beside the count, the layout toggle: two quiet icon buttons, the current one
+  raised (bone, not red).
+*/
+.section-head-end { display: flex; align-items: center; gap: 0.75rem; }
+.section-count-extra { display: none; }
+@media (min-width: 40rem) {
+  .section-count-extra { display: inline; }
+}
+
+.view-toggle { display: flex; gap: 0.15rem; margin-block: -0.5rem; }
+.view-toggle button {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  transition: color var(--release) var(--ease-out), background-color var(--release) var(--ease-out);
+}
+.view-toggle button[aria-pressed='true'] { color: var(--ink); background: var(--hover-tint); }
+.view-toggle button:active { background: var(--press-tint); transition-duration: var(--press); }
+
+.book-list { list-style: none; margin: -0.75rem 0 0; padding: 0; }
+.book-list > li + li { border-top: 1px solid var(--rule); }
+.book-list .book-tile {
+  grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 1rem;
+  row-gap: 0;
+  padding: 0.75rem 0;
+}
+.book-list .book-tile .cover { grid-row: 1 / span 2; margin: 0; }
+/* No room for a set title on a 56px board. */
+.book-list .cover-cloth span { display: none; }
+.book-list .book-title {
+  grid-column: 2;
+  align-self: end;
+  font-size: 1.125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.book-list .book-tile .muted {
+  grid-column: 2;
+  align-self: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.book-list .book-length { grid-column: 3; grid-row: 1 / span 2; }
+
+@media (min-width: 40rem) {
+  .book-list .book-tile { grid-template-columns: 4rem minmax(0, 1fr) auto; column-gap: 1.25rem; }
+}
+
+@media (hover: hover) {
+  .view-toggle button:hover { color: var(--ink); background: var(--hover-tint); }
 }
 
 /* ---------- Sidebar ---------- */
@@ -1475,8 +1557,8 @@ button { -webkit-user-select: none; user-select: none; }
   window (4, 6, then 8 tracks); the book and admin pages keep the frame's width,
   since a player or a form gains nothing from 1600px.
 
-  Narrower screens keep everything as it was: no sidebar, masthead links, the
-  search button and band with chips.
+  Narrower screens keep everything as it was: no sidebar, masthead links, and
+  the search row with chips under the masthead.
 */
 .sidebar { display: none; }
 .continue-next-head { display: none; }
@@ -1534,11 +1616,9 @@ button { -webkit-user-select: none; user-select: none; }
   /* The masthead is the main column's top bar: search and sort only. */
   .shell[data-sidebar] .masthead .wordmark,
   .shell[data-sidebar] .masthead-nav,
-  .shell[data-sidebar] .search-toggle,
   .shell[data-sidebar] .library-status { display: none; }
   .shell[data-sidebar] .masthead:not(:has(.library-toolbar)) { display: none; }
-  .shell[data-sidebar] .library-toolbar,
-  .shell[data-sidebar] .library-toolbar:not([data-open]) {
+  .shell[data-sidebar] .library-toolbar {
     grid-area: 1 / 1 / 2 / -1;
     display: flex;
     justify-content: center;
@@ -1547,8 +1627,9 @@ button { -webkit-user-select: none; user-select: none; }
     margin-block: -0.5rem;
     padding: 0;
   }
-  .shell[data-sidebar] .library-search { flex: 0 1 40rem; width: auto; font-size: 1.125rem; padding: 0.35rem 0; }
-  .shell[data-sidebar] .library-filters { flex: none; }
+  .shell[data-sidebar] .library-search-field { flex: 0 1 40rem; }
+  .shell[data-sidebar] .library-search { font-size: 1.125rem; padding: 0.35rem 0; }
+  .shell[data-sidebar] .library-filters { flex: none; margin: 0; padding: 0; overflow: visible; -webkit-mask-image: none; mask-image: none; }
 
   /* Book and admin pages keep the frame's width inside the wider column. */
   .shell[data-sidebar] .app:not(:has(> .shelf)) { max-width: var(--frame); }

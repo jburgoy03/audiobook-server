@@ -104,6 +104,37 @@ Filters combine with search with AND; choices within one filter combine with OR.
   sticky on phones, chips inline or behind a "Filter" button, whether sort is
   remembered per browser.
 
+### Mobile rework (2026-10-08)
+
+Trying it on a phone, finding books was hard work. Changes:
+
+- **Keyboard didn't open.** The search button focused the box a frame after the
+  tap (once the band was displayed); iOS Safari only raises the keyboard for a
+  focus inside the tap itself. The button and band are gone: below 64em the
+  search row is always shown under the wordmark, so a tap lands on the input.
+- **Sticky on phones and tablets.** The masthead sticks with a negative top
+  (`--masthead-lead`): the wordmark row scrolls away, search and filters stay.
+  Row heights are fixed there so the offset is exact.
+- **Chips and sort on one line** that scrolls sideways, with a fade at the right
+  edge, so the pinned bar stays two rows tall.
+- **Own clear button** (44px, keeps focus); the native one is missing on some
+  mobile browsers. **Enter** sends immediately and closes the keyboard. A new
+  search scrolls to the top so results start in view.
+- **List layout** for All books: 56px cover, title, author, length, ruled rows.
+  About 8 books a screen on a phone against 4 for the two-column grid. A
+  grid/list toggle sits beside the count, saved per browser
+  (`audiobook:libraryView`). With no saved choice, phones (< 40rem) get the list
+  and wider screens the grid: a width heuristic the toggle overrides.
+- **Continue listening compacted on phones** (< 40rem). The feature was a full
+  screen on its own; it's now a ~155px card (small cover, title, author, seek
+  bar, times beside Resume; no chapter line). Up next becomes two-line ruled
+  rows, capped at two (every book in progress is under the In progress chip).
+  Section gaps and headings tighten. With one book in progress, the library's
+  first rows show on the first screen; with several, its heading does.
+- The 75em one-row masthead layout was removed; at 64em and up the sidebar
+  layout already owns that space.
+
+
 ### Steps
 
 1. `search.ts`: normalise, `matchesQuery`, sort comparators, status classification

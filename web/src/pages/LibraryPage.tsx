@@ -3,12 +3,13 @@ import { Link } from 'react-router'
 import { api } from '../api/client'
 import type { BookDetail, BookSummary } from '../api/types'
 import { Cover } from '../components/Cover'
-import { PlayPauseIcon } from '../components/Icons'
+import { GridIcon, ListIcon, PlayPauseIcon } from '../components/Icons'
 import { isFiltering, useLibraryQuery } from '../library/libraryQuery'
 import { bookStatus, compareBooks, matchesQuery } from '../library/search'
 import { ChapterTimeline } from '../player/ChapterTimeline'
 import { useActivate, useActiveBookId, useLivePlayer } from '../player/nowPlaying'
 import { progressStore, useProgressEntries } from '../player/progress'
+import { loadLibraryView, saveLibraryView, type LibraryView } from '../player/storage'
 import { chapterIndexAt, clampPosition } from '../player/timeline'
 
 /** "4h 12m", "38m". Rounded, because this is a glance, not a clock. */
@@ -17,6 +18,31 @@ function formatLength(seconds: number) {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   return h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`
+}
+
+/**
+ * Covers or rows. A browser that never chose gets rows on a phone, where the
+ * two-column grid shows four books a screen and rows show about a dozen, and
+ * covers everywhere else. A heuristic on width; the toggle overrides it, and the
+ * choice is kept per browser.
+ */
+function initialView(): LibraryView {
+  const saved = loadLibraryView()
+  if (saved) return saved
+  return window.matchMedia('(max-width: 39.99rem)').matches ? 'list' : 'grid'
+}
+
+function ViewToggle({ view, onChange }: { view: LibraryView; onChange: (view: LibraryView) => void }) {
+  return (
+    <div className="view-toggle" role="group" aria-label="Layout">
+      <button type="button" aria-label="Covers" aria-pressed={view === 'grid'} onClick={() => onChange('grid')}>
+        <GridIcon size={18} />
+      </button>
+      <button type="button" aria-label="List" aria-pressed={view === 'list'} onClick={() => onChange('list')}>
+        <ListIcon size={18} />
+      </button>
+    </div>
+  )
 }
 
 interface Progress {
@@ -263,6 +289,11 @@ function ContinueItem({ book, progress }: { book: BookSummary; progress: Progres
 export function LibraryPage() {
   const [books, setBooks] = useState<BookSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [view, setView] = useState(initialView)
+  const changeView = (next: LibraryView) => {
+    setView(next)
+    saveLibraryView(next)
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -400,11 +431,20 @@ export function LibraryPage() {
         <div className="section-head">
           <h2 id="all-heading">{filtering ? 'Results' : 'All books'}</h2>
           {/* Announced as it changes, so a screen reader hears the count while typing. */}
-          <span className="section-count" aria-live="polite">
-            {filtering
-              ? `${shown.length} of ${books.length} ${books.length === 1 ? 'book' : 'books'}`
-              : `${books.length} ${books.length === 1 ? 'book' : 'books'}, ${formatLength(totalSeconds)}`}
-          </span>
+          <div className="section-head-end">
+            <span className="section-count" aria-live="polite">
+              {filtering ? (
+                `${shown.length} of ${books.length}`
+              ) : (
+                <>
+                  {books.length} {books.length === 1 ? 'book' : 'books'}
+                  {/* The total is a nicety; a phone needs the room for the toggle. */}
+                  <span className="section-count-extra">, {formatLength(totalSeconds)}</span>
+                </>
+              )}
+            </span>
+            <ViewToggle view={view} onChange={changeView} />
+          </div>
         </div>
         {shown.length === 0 && (
           <div className="library-empty">
@@ -418,7 +458,9 @@ export function LibraryPage() {
             </button>
           </div>
         )}
-        <ul className="shelf-list grid">
+        {/* One markup for both layouts: the same link, cover and text, laid out
+            as a tile or a row by CSS ("Library list" in index.css). */}
+        <ul className={view === 'list' ? 'book-list' : 'shelf-list grid'}>
           {shown.map((b) => (
             <li key={b.id}>
               <Link to={`/books/${b.id}`} className="book-tile">
