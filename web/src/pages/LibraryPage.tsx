@@ -237,14 +237,23 @@ function LiveCover({ book, savedFraction }: { book: BookSummary; savedFraction?:
 }
 
 /**
- * One of the books after the featured one. The whole cover is a play button that
+ * A book in progress as a compact item: the whole cover is a play button that
  * starts the book right here; the title and author link to the book's page.
- * Playing makes it the active book, which is always featured, so it moves up to
- * the top. The play icon on the cover is only a hint (hover, or always on touch).
+ * The play icon on the cover is only a hint (hover, or always on touch).
+ *
+ * Used for Up next beside or under the featured book, and on phones for the
+ * whole Continue listening shelf, the active book included. So it follows the
+ * player: on the active book the cover pauses and resumes it, and its progress
+ * and time left are live. `progress` is undefined for an active book that hasn't
+ * yet been saved past the minute (see LibraryPage).
  */
-function ContinueItem({ book, progress }: { book: BookSummary; progress: Progress }) {
+function ContinueItem({ book, progress }: { book: BookSummary; progress?: Progress }) {
   const activate = useActivate()
+  const live = useLivePlayer(book.id)
   const [starting, setStarting] = useState(false)
+  const position = live ? live.position : (progress?.position ?? 0)
+  const fraction = book.durationSeconds > 0 ? position / book.durationSeconds : 0
+  const playing = live?.playing ?? false
 
   const play = async () => {
     setStarting(true)
@@ -258,20 +267,21 @@ function ContinueItem({ book, progress }: { book: BookSummary; progress: Progres
   }
 
   return (
-    <li>
+    <li data-active={live ? '' : undefined}>
       <button
         type="button"
         className="continue-cover"
-        aria-label={`Play ${book.title}`}
-        aria-busy={starting || undefined}
+        aria-label={`${playing ? 'Pause' : 'Play'} ${book.title}`}
+        aria-busy={starting || (live?.loading && !playing) ? true : undefined}
         onClick={() => {
-          if (!starting) void play()
+          if (live) live.toggle()
+          else if (!starting) void play()
         }}
       >
-        <Cover bookId={book.id} title={book.title} hasCover={book.hasCover} progress={progress.fraction} />
+        <Cover bookId={book.id} title={book.title} hasCover={book.hasCover} progress={fraction} />
         <span className="continue-play" aria-hidden="true">
           <span className="continue-play-disc">
-            <PlayPauseIcon playing={false} size={22} />
+            <PlayPauseIcon playing={playing} size={22} />
           </span>
         </span>
       </button>
@@ -279,7 +289,7 @@ function ContinueItem({ book, progress }: { book: BookSummary; progress: Progres
         <span className="continue-text">
           <span className="book-title">{book.title}</span>
           <span className="muted">{book.author ?? 'Unknown author'}</span>
-          <span className="continue-left">{formatLength(book.durationSeconds - progress.position)} left</span>
+          <span className="continue-left">{formatLength(book.durationSeconds - position)} left</span>
         </span>
       </Link>
     </li>
@@ -412,6 +422,15 @@ export function LibraryPage() {
             savedPosition={progress.get(featured.id)?.position ?? 0}
           />
 
+          {/* Phones: every book in progress as a compact row, the active one
+              first, in place of the feature and Up next (CSS shows one or the
+              other; see "Continue listening on phones" in index.css). */}
+          <ul className="continue-list continue-compact">
+            {inProgress.map((b) => (
+              <ContinueItem key={b.id} book={b} progress={progress.get(b.id)} />
+            ))}
+          </ul>
+
           {/* Under the feature, or beside it as "Up next" when the sidebar layout
               leaves room (see "Sidebar" in index.css). */}
           {others.length > 0 && (
@@ -419,7 +438,7 @@ export function LibraryPage() {
               <h3 className="continue-next-head">Up next</h3>
               <ul className="shelf-list continue-list continue-more grid">
                 {others.map((b) => (
-                  <ContinueItem key={b.id} book={b} progress={progress.get(b.id)!} />
+                  <ContinueItem key={b.id} book={b} progress={progress.get(b.id)} />
                 ))}
               </ul>
             </div>

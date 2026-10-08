@@ -125,12 +125,13 @@ Trying it on a phone, finding books was hard work. Changes:
   grid/list toggle sits beside the count, saved per browser
   (`audiobook:libraryView`). With no saved choice, phones (< 40rem) get the list
   and wider screens the grid: a width heuristic the toggle overrides.
-- **Continue listening compacted on phones** (< 40rem). The feature was a full
-  screen on its own; it's now a ~155px card (small cover, title, author, seek
-  bar, times beside Resume; no chapter line). Up next becomes two-line ruled
-  rows, capped at two (every book in progress is under the In progress chip).
-  Section gaps and headings tighten. With one book in progress, the library's
-  first rows show on the first screen; with several, its heading does.
+- **Continue listening as rows on phones** (< 40rem). The featured book filled
+  the first screen by itself, and with Safari's bars and the now-playing bar
+  nothing else showed. Phones now get one list of every book in progress (up to
+  four, active first): small cover that plays or pauses, title, author and time
+  left. Dean's call (2026-10-08): seeking stays on the book page and the
+  now-playing bar, and the cover is Resume. The first-visit "Newly added" book
+  keeps the feature, as a small card. Tablet and desktop unchanged.
 - The 75em one-row masthead layout was removed; at 64em and up the sidebar
   layout already owns that space.
 
