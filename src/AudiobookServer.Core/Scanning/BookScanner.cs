@@ -64,11 +64,14 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
     /// album they belong to, the tagger is telling us the folder holds a collection,
     /// so each album becomes its own book. Uniform album tags stay one book even when
     /// the titles look like separate volumes — the tags are the assertion we trust.
+    ///
+    /// Albums are compared without a trailing disc marker and ignoring case, so a
+    /// CD rip tagged "Title (Disc 1)" … "Title (Disc 23)" is one book, not 23.
     /// </summary>
     private static List<BookGroup> GroupIntoBooks(List<ProbedFile> probed)
     {
         var distinctAlbums = probed
-            .Select(p => p.Tag("album"))
+            .Select(AlbumOf)
             .Where(a => a is not null)
             .Select(a => a!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -78,7 +81,7 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
             return [new BookGroup(null, probed)];
 
         return probed
-            .GroupBy(p => p.Tag("album") ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(p => AlbumOf(p) ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .Select(g => new BookGroup(g.Key.Length == 0 ? null : g.Key, g.ToList()))
             .ToList();
     }
@@ -143,7 +146,7 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         }
 
         var first = ordered[0];
-        var album = group.Album ?? first.Tag("album");
+        var album = group.Album ?? PreferredAlbum(ordered);
 
         // Usually every file carries the same picture, so the first file in playback
         // order that has one speaks for the book. It then competes with the folder's
@@ -188,6 +191,38 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
             .OrderBy(p => Path.GetRelativePath(directoryPath, p.Path).Replace('\\', '/'), NaturalComparer.Instance)
             .ToList();
     }
+
+    /// <summary>The file's album tag without a trailing disc marker.</summary>
+    private static string? AlbumOf(ProbedFile file) => StripDiscMarker(file.Tag("album"));
+
+    /// <summary>
+    /// "Title (Disc 3)", "Title [CD 03]", "Title - Disc 3 of 23", "Title, disk 3" → "Title".
+    ///
+    /// A heuristic on tag text. Only a trailing disc/disk/CD plus a number counts, and it
+    /// must follow a separator or bracket, so a word merely ending in "cd" is safe.
+    /// "Part 2" is deliberately left alone: parts are often separate books.
+    /// </summary>
+    private static string? StripDiscMarker(string? album)
+    {
+        if (string.IsNullOrWhiteSpace(album)) return null;
+        var match = DiscSuffix().Match(album.Trim());
+        return match.Success ? match.Groups["base"].Value.Trim() : album.Trim();
+    }
+
+    /// <summary>
+    /// Discs of one rip sometimes disagree on capitalisation ("of The Phoenix"), so the
+    /// title takes the spelling most files use; ties go to the earliest in play order.
+    /// </summary>
+    private static string? PreferredAlbum(List<ProbedFile> ordered) =>
+        ordered
+            .Select(AlbumOf)
+            .Where(a => a is not null)
+            .Select((a, i) => (Album: a!, Index: i))
+            .GroupBy(x => x.Album, StringComparer.Ordinal)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Min(x => x.Index))
+            .Select(g => g.Key)
+            .FirstOrDefault();
 
     /// <summary>Handles both "3" and "3/21".</summary>
     private static int? ParseTrack(string? raw)
@@ -251,6 +286,9 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         try { return File.GetLastWriteTimeUtc(path); }
         catch { return DateTimeOffset.UtcNow; }
     }
+
+    [GeneratedRegex(@"^(?<base>.+?)(?:[\s,:\-\u2013]+[(\[]?|[(\[])\s*(?:dis[ck]|cd)\s*\d+(?:\s*(?:of|/)\s*\d+)?\s*[)\]]?$", RegexOptions.IgnoreCase)]
+    private static partial Regex DiscSuffix();
 
     [GeneratedRegex(@"^(?<series>[^-]{2,40})-(?<title>(?!\p{Ll}).+)$")]
     private static partial Regex SeriesPrefix();

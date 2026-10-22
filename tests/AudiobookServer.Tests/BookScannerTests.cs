@@ -247,6 +247,54 @@ public class BookScannerTests
     }
 
     [Fact]
+    public async Task Per_disc_album_tags_are_one_book_in_file_name_order()
+    {
+        // The Order of the Phoenix case: one flat folder, every disc tagged as its own
+        // album (with inconsistent capitalisation), track numbers restarting per disc.
+        const string dir = "/library/J.K. Rowling - Harry Potter 05 - The Order of the Phoenix";
+        var a = File($"{dir}/Chapter 01A.mp3", 100, track: "1", album: "Harry Potter and the Order of the Phoenix (Disc 1)");
+        var b = File($"{dir}/Chapter 01B.mp3", 100, track: "2", album: "Harry Potter and the Order of the Phoenix (Disc 1)");
+        var c = File($"{dir}/Chapter 02A.mp3", 100, track: "1", album: "Harry Potter and the Order of The Phoenix (Disc 2)");
+        var d = File($"{dir}/Chapter 10A.mp3", 100, track: "1", album: "Harry Potter and The Order of the Phoenix (Disc 10)");
+
+        var book = await ScanOneAsync(ScannerFor(a, b, c, d), dir, d.Path, c.Path, b.Path, a.Path);
+
+        Assert.Equal("Harry Potter and the Order of the Phoenix", book.Title);
+        Assert.DoesNotContain("#", book.Key);
+        Assert.Equal(
+            ["Chapter 01A.mp3", "Chapter 01B.mp3", "Chapter 02A.mp3", "Chapter 10A.mp3"],
+            book.Files.Select(f => Path.GetFileName(f.RelativePath)));
+    }
+
+    [Fact]
+    public async Task Different_albums_still_split_when_they_carry_disc_markers()
+    {
+        var one = File("/library/Dune/1.mp3", 100, album: "Dune (Disc 1)");
+        var two = File("/library/Dune/2.mp3", 200, album: "Dune Messiah (Disc 1)");
+
+        var books = await ScannerFor(one, two)
+            .ScanAsync(new BookCandidate("/library/Dune", [one.Path, two.Path]), Root);
+
+        Assert.Equal(["Dune", "Dune Messiah"], books.Select(b => b.Title).Order());
+    }
+
+    [Theory]
+    [InlineData("Some Book (Disc 1)", "Some Book")]
+    [InlineData("Some Book (disc 01)", "Some Book")]
+    [InlineData("Some Book [CD 3]", "Some Book")]
+    [InlineData("Some Book - Disc 3 of 23", "Some Book")]
+    [InlineData("Some Book, Disk 2", "Some Book")]
+    [InlineData("Some Book CD 4", "Some Book")]
+    [InlineData("Some Book (Part 2)", "Some Book (Part 2)")]
+    [InlineData("Abcd 3", "Abcd 3")]
+    public async Task Disc_markers_are_stripped_from_the_title(string album, string expected)
+    {
+        var a = File("/library/book/01.mp3", 100, album: album);
+        var book = await ScanOneAsync(ScannerFor(a), "/library/book", a.Path);
+        Assert.Equal(expected, book.Title);
+    }
+
+    [Fact]
     public async Task Restarts_the_timeline_for_each_split_book()
     {
         var one = File("/library/Dune/1.m4b", 100, track: "1", album: "Book One");
