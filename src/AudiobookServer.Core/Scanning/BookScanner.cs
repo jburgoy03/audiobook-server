@@ -66,22 +66,18 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
     /// the titles look like separate volumes — the tags are the assertion we trust.
     ///
     /// Albums are compared without a trailing disc marker and ignoring case, so a
-    /// CD rip tagged "Title (Disc 1)" … "Title (Disc 23)" is one book, not 23.
+    /// CD rip tagged "Title (Disc 1)" … "Title (Disc 23)" is one book, not 23. A disc
+    /// whose album has one misspelled word also joins its siblings (see LooksLikeTypo).
     /// </summary>
     private static List<BookGroup> GroupIntoBooks(List<ProbedFile> probed)
     {
-        var distinctAlbums = probed
-            .Select(AlbumOf)
-            .Where(a => a is not null)
-            .Select(a => a!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Count();
+        var canonical = CanonicalAlbums(probed);
 
-        if (distinctAlbums <= 1)
+        if (canonical.Values.Distinct(StringComparer.OrdinalIgnoreCase).Count() <= 1)
             return [new BookGroup(null, probed)];
 
         return probed
-            .GroupBy(p => AlbumOf(p) ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(p => AlbumOf(p) is { } a ? canonical[a] : string.Empty, StringComparer.OrdinalIgnoreCase)
             .Select(g => new BookGroup(g.Key.Length == 0 ? null : g.Key, g.ToList()))
             .ToList();
     }
@@ -190,6 +186,76 @@ public partial class BookScanner(IMediaProbe probe) : IBookScanner
         return probed
             .OrderBy(p => Path.GetRelativePath(directoryPath, p.Path).Replace('\\', '/'), NaturalComparer.Instance)
             .ToList();
+    }
+
+    /// <summary>
+    /// Maps each album in the folder to the album it should count as. The most common
+    /// albums claim first, so a typo found on one disc folds into the spelling the
+    /// other discs use rather than the other way round.
+    /// </summary>
+    private static Dictionary<string, string> CanonicalAlbums(List<ProbedFile> probed)
+    {
+        var byFrequency = probed
+            .Select(AlbumOf)
+            .Where(a => a is not null)
+            .GroupBy(a => a!, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .Select(g => g.Key);
+
+        var representatives = new List<string>();
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var album in byFrequency)
+        {
+            var match = representatives.FirstOrDefault(r => LooksLikeTypo(album, r));
+            if (match is null) representatives.Add(album);
+            map[album] = match ?? album;
+        }
+        return map;
+    }
+
+    /// <summary>
+    /// Two albums are taken to be one when they have the same words except one, and
+    /// that word is a near-miss spelling: at least 4 letters on both sides, no digits,
+    /// at most 2 letters different ("Pottrr" / "Potter").
+    ///
+    /// A heuristic, kept narrow on purpose. Volume markers stay distinct: numbers
+    /// ("Book 1" / "Book 2"), roman numerals ("I" / "II") and short words
+    /// ("One" / "Two") never qualify. Two genuinely different books whose titles
+    /// differ by one slightly different long word would wrongly merge.
+    /// </summary>
+    private static bool LooksLikeTypo(string a, string b)
+    {
+        var wa = a.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var wb = b.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (wa.Length != wb.Length) return false;
+
+        var differing = Enumerable.Range(0, wa.Length)
+            .Where(i => !string.Equals(wa[i], wb[i], StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (differing.Count != 1) return false;
+
+        var x = wa[differing[0]].ToLowerInvariant();
+        var y = wb[differing[0]].ToLowerInvariant();
+        return x.Length >= 4 && y.Length >= 4
+            && !x.Any(char.IsDigit) && !y.Any(char.IsDigit)
+            && EditDistance(x, y) <= 2;
+    }
+
+    private static int EditDistance(string a, string b)
+    {
+        var previous = Enumerable.Range(0, b.Length + 1).ToArray();
+        for (var i = 1; i <= a.Length; i++)
+        {
+            var current = new int[b.Length + 1];
+            current[0] = i;
+            for (var j = 1; j <= b.Length; j++)
+            {
+                var cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                current[j] = Math.Min(Math.Min(current[j - 1] + 1, previous[j] + 1), previous[j - 1] + cost);
+            }
+            previous = current;
+        }
+        return previous[b.Length];
     }
 
     /// <summary>The file's album tag without a trailing disc marker.</summary>

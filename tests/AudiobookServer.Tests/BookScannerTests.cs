@@ -278,6 +278,36 @@ public class BookScannerTests
         Assert.Equal(["Dune", "Dune Messiah"], books.Select(b => b.Title).Order());
     }
 
+    [Fact]
+    public async Task A_disc_with_a_misspelled_album_joins_the_rest_of_the_book()
+    {
+        // Phoenix again: one disc of 23 was tagged "Harry Pottrr".
+        const string dir = "/library/phoenix";
+        var a = File($"{dir}/Chapter 17A.mp3", 100, album: "Harry Potter and the Order of the Phoenix (Disc 13)");
+        var b = File($"{dir}/Chapter 18D.mp3", 100, album: "Harry Pottrr and the Order of the Phoenix (Disc 14)");
+        var c = File($"{dir}/Chapter 19K.mp3", 100, album: "Harry Potter and the Order of the Phoenix (Disc 15)");
+
+        var book = await ScanOneAsync(ScannerFor(a, b, c), dir, a.Path, b.Path, c.Path);
+
+        Assert.Equal("Harry Potter and the Order of the Phoenix", book.Title);
+        Assert.Equal(3, book.Files.Count);
+    }
+
+    [Theory]
+    [InlineData("The Stormlight Archive I", "The Stormlight Archive II")]
+    [InlineData("Book One", "Book Two")]
+    [InlineData("Mistborn Book 1", "Mistborn Book 2")]
+    [InlineData("The Fellowship of the Ring", "The Return of the King")]
+    public async Task Volume_markers_are_not_mistaken_for_typos(string first, string second)
+    {
+        var a = File("/library/set/1.mp3", 100, album: first);
+        var b = File("/library/set/2.mp3", 100, album: second);
+
+        var books = await ScannerFor(a, b).ScanAsync(new BookCandidate("/library/set", [a.Path, b.Path]), Root);
+
+        Assert.Equal(2, books.Count);
+    }
+
     [Theory]
     [InlineData("Some Book (Disc 1)", "Some Book")]
     [InlineData("Some Book (disc 01)", "Some Book")]
