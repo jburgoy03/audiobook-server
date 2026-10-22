@@ -62,6 +62,27 @@ describe('writeLibraryQuery', () => {
   })
 })
 
+describe('saved sort as the fallback', () => {
+  it('reads a URL without sort as the saved sort', () => {
+    expect(parseLibraryQuery(new URLSearchParams(''), 'added').sort).toBe('added')
+  })
+
+  it('lets the URL override the saved sort', () => {
+    expect(parseLibraryQuery(new URLSearchParams('sort=length'), 'added').sort).toBe('length')
+  })
+
+  it('writes title explicitly when the saved sort is something else', () => {
+    // Otherwise a bare URL would read back as the saved sort, not title.
+    const written = writeLibraryQuery(new URLSearchParams(''), { ...EMPTY_QUERY, sort: 'title' }, 'added')
+    expect(written.toString()).toBe('sort=title')
+    expect(parseLibraryQuery(written, 'added').sort).toBe('title')
+  })
+
+  it('leaves the saved sort out of the URL', () => {
+    expect(writeLibraryQuery(new URLSearchParams(''), { ...EMPTY_QUERY, sort: 'added' }, 'added').toString()).toBe('')
+  })
+})
+
 describe('isFiltering', () => {
   it('is true for a search or a status, not for a sort alone', () => {
     expect(isFiltering(EMPTY_QUERY)).toBe(false)

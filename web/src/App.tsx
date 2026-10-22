@@ -6,7 +6,10 @@ import { NowPlayingBar } from './components/NowPlayingBar'
 import { Sidebar } from './components/Sidebar'
 import { LibrarySearch } from './library/LibraryToolbar'
 import { AdminPage } from './pages/AdminPage'
+import { AuthorPage } from './pages/AuthorPage'
+import { AuthorsPage } from './pages/AuthorsPage'
 import { BookPage } from './pages/BookPage'
+import { HomePage } from './pages/HomePage'
 import { LibraryPage } from './pages/LibraryPage'
 import { PlayerProvider } from './player/PlayerProvider'
 
@@ -59,7 +62,10 @@ export default function App() {
             <PlayerProvider>
               <main className="app frame">
                 <Routes>
-                  <Route path="/" element={<LibraryPage />} />
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/library" element={<LibraryPage />} />
+                  <Route path="/authors" element={<AuthorsPage />} />
+                  <Route path="/authors/:slug" element={<AuthorPage />} />
                   <Route path="/books/:id" element={<BookPage />} />
                   {/* A non-admin who types the URL lands on the library. */}
                   <Route path="/admin" element={isAdmin ? <AdminPage /> : <Navigate to="/" replace />} />

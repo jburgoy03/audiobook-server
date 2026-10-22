@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
 import { CloseIcon, SearchIcon } from '../components/Icons'
-import { useLibraryQuery } from './libraryQuery'
+import { LIBRARY_PATH, useLibraryQuery } from './libraryQuery'
 import { BOOK_STATUSES, SORT_KEYS, SORT_LABELS, STATUS_LABELS, type BookStatus, type SortKey } from './search'
 
 // How long typing pauses before the search reaches the URL (and the results).
@@ -14,8 +14,10 @@ function isEditable(target: EventTarget | null): boolean {
 }
 
 /**
- * The library's search, status filters and sort, in the masthead. Only on the
- * library page; other pages keep a plain masthead.
+ * The library's search, status filters and sort, in the masthead. On the home
+ * page and All books; other pages keep a plain masthead. From home, the first
+ * keystroke (or chip, or sort) moves to All books, and the box keeps its text
+ * and focus, since it's the same component on both pages.
  *
  * Always shown, at every width. It used to sit behind a search button on narrow
  * screens, and the button focused the box a frame after the tap, once the band
@@ -45,11 +47,13 @@ function isEditable(target: EventTarget | null): boolean {
  */
 export function LibrarySearch() {
   const { pathname } = useLocation()
-  if (pathname !== '/') return null
-  return <LibraryToolbar />
+  if (pathname !== '/' && pathname !== LIBRARY_PATH) return null
+  // Home shows the search alone: chips and sort there would only jump to All
+  // books, which reads as if they'd filter the shelves.
+  return <LibraryToolbar searchOnly={pathname === '/'} />
 }
 
-function LibraryToolbar() {
+function LibraryToolbar({ searchOnly }: { searchOnly: boolean }) {
   const [query, onChange] = useLibraryQuery()
   const input = useRef<HTMLInputElement>(null)
   const timer = useRef<number | undefined>(undefined)
@@ -154,32 +158,34 @@ function LibraryToolbar() {
         )}
       </div>
 
-      <div className="library-filters">
-        <div className="library-status" role="group" aria-label="Status">
-          {BOOK_STATUSES.map((status) => (
-            <button
-              key={status}
-              type="button"
-              className="pill chip"
-              aria-pressed={query.statuses.includes(status)}
-              onClick={() => toggleStatus(status)}
-            >
-              {STATUS_LABELS[status]}
-            </button>
-          ))}
-        </div>
-
-        <label className="picker">
-          <span>Sort</span>
-          <select value={query.sort} onChange={(e) => onChange({ sort: e.target.value as SortKey })}>
-            {SORT_KEYS.map((key) => (
-              <option key={key} value={key}>
-                {SORT_LABELS[key]}
-              </option>
+      {!searchOnly && (
+        <div className="library-filters">
+          <div className="library-status" role="group" aria-label="Status">
+            {BOOK_STATUSES.map((status) => (
+              <button
+                key={status}
+                type="button"
+                className="pill chip"
+                aria-pressed={query.statuses.includes(status)}
+                onClick={() => toggleStatus(status)}
+              >
+                {STATUS_LABELS[status]}
+              </button>
             ))}
-          </select>
-        </label>
-      </div>
+          </div>
+
+          <label className="picker">
+            <span>Sort</span>
+            <select value={query.sort} onChange={(e) => onChange({ sort: e.target.value as SortKey })}>
+              {SORT_KEYS.map((key) => (
+                <option key={key} value={key}>
+                  {SORT_LABELS[key]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
     </search>
   )
 }

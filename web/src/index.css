@@ -1761,3 +1761,103 @@ button { -webkit-user-select: none; user-select: none; }
   .sidebar-link:hover { background: var(--hover-tint); }
   .sidebar-quiet:hover { color: var(--ink); }
 }
+
+/* ---------- Home shelves and authors ---------- */
+
+/*
+  The home page: short rows that scroll sideways, each with See all into the
+  full list. A row's items are sized to the page's tracks plus a sliver of the
+  next one, so the cut-off cover on the right edge is the hint that it scrolls.
+  Pointer screens also get quiet previous/next buttons beside See all.
+*/
+.browse { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 2rem; }
+.browse .pill { text-decoration: none; font-size: 1rem; }
+.browse-count { margin-left: 0.3rem; color: var(--muted); font-variant-numeric: lining-nums tabular-nums; }
+
+.section-note { color: var(--muted); font-size: 1.0625rem; }
+/* Phones: the heading, arrows and See all already fill the line. */
+@media (max-width: 39.99rem) {
+  .section-note { display: none; }
+}
+
+.see-all {
+  color: var(--muted);
+  font-style: italic;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--release) var(--ease-out);
+}
+
+.shelf-row {
+  --peek: 0.35;
+  list-style: none;
+  /* Room for focus rings, which overflow would otherwise clip. */
+  margin: -4px 0;
+  padding: 4px 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: calc((100% - var(--cols) * var(--col-gap)) / (var(--cols) + var(--peek)));
+  column-gap: var(--col-gap);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.shelf-row::-webkit-scrollbar { display: none; }
+.shelf-row > li { scroll-snap-align: start; }
+
+.shelf-arrows { display: none; }
+@media (hover: hover) {
+  .shelf-arrows { display: flex; gap: 0.15rem; margin-block: -0.5rem; }
+  .shelf-arrows button {
+    display: grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color var(--release) var(--ease-out), background-color var(--release) var(--ease-out);
+  }
+  .shelf-arrows button:hover:not(:disabled) { color: var(--ink); background: var(--hover-tint); }
+  .shelf-arrows button:active:not(:disabled) { background: var(--press-tint); transition-duration: var(--press); }
+  .shelf-arrows button:disabled { color: var(--faint); opacity: 0.5; cursor: default; }
+  .see-all:hover { color: var(--ink); }
+}
+
+/* An author: up to three covers fanned back and up like a stack of books, the
+   ones behind dimmed, then the name and a count. */
+.author-card { display: grid; gap: 0.1rem; text-decoration: none; }
+.author-card .muted { font-style: italic; }
+.author-stack {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  margin-bottom: 0.75rem;
+  isolation: isolate;
+  transition: transform 220ms var(--ease-out);
+}
+.author-card:active .author-stack { transform: scale(0.97); transition-duration: var(--press); }
+.author-stack .cover { position: absolute; left: 0; bottom: 0; width: 100%; }
+.author-stack[data-count='2'] .cover { width: 93%; }
+.author-stack[data-count='3'] .cover { width: 86%; }
+.author-stack .cover:nth-child(1) { z-index: 3; }
+.author-stack .cover:nth-child(2) { z-index: 2; left: 7%; bottom: 7%; filter: brightness(0.55); }
+.author-stack .cover:nth-child(3) { z-index: 1; left: 14%; bottom: 14%; filter: brightness(0.35); }
+
+/* An author's page drops the author line, so a row's title centres on the cover. */
+.book-list .book-tile:not(:has(.muted)) .book-title { grid-row: 1 / span 2; align-self: center; }
+
+/* The author's name on a book page: a link, quiet until pointed at. */
+.author-link { text-decoration-color: var(--faint); text-underline-offset: 0.2em; }
+@media (hover: hover) {
+  .author-link:hover { color: var(--ink); text-decoration-color: currentColor; }
+}
+
+/* The sidebar has these links, so wide screens drop the row. */
+@media (min-width: 64em) {
+  .shell[data-sidebar] .browse { display: none; }
+}

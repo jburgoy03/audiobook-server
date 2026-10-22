@@ -119,6 +119,7 @@ export const VolumeIcon = ({ level, muted, size = 22 }: IconProps & { level: num
   )
 
 export const BackIcon = ({ size = 18 }: IconProps) => icon(size, <path d="M14.5 6 L8.5 12 L14.5 18" />)
+export const ForwardIcon = ({ size = 18 }: IconProps) => icon(size, <path d="M9.5 6 L15.5 12 L9.5 18" />)
 
 export const SearchIcon = ({ size = 20 }: IconProps) =>
   icon(

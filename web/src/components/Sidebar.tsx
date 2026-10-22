@@ -1,6 +1,6 @@
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router'
 import { logout } from '../auth/auth'
-import { parseLibraryQuery, writeLibraryQuery } from '../library/libraryQuery'
+import { defaultSort, LIBRARY_PATH, parseLibraryQuery, writeLibraryQuery } from '../library/libraryQuery'
 import { STATUS_LABELS, type BookStatus } from '../library/search'
 
 /** The library's views, in sidebar order. "All books" is no status filter. */
@@ -12,8 +12,8 @@ const VIEWS: readonly { label: string; status: BookStatus | null }[] = [
 ]
 
 /**
- * The desktop sidebar: wordmark, the library's views, and the account links at
- * the bottom. Shown from 64em; narrower screens keep the masthead (CSS decides).
+ * The desktop sidebar: wordmark, Home, the library's views and Authors, and the
+ * account links at the bottom. Shown from 64em; narrower screens keep the masthead (CSS decides).
  *
  * A view is the status filter as one choice: picking one keeps the search and
  * sort and replaces the status. The masthead's chips on narrow screens allow
@@ -25,17 +25,20 @@ const VIEWS: readonly { label: string; status: BookStatus | null }[] = [
 export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
   const { pathname } = useLocation()
   const [params] = useSearchParams()
-  const onLibrary = pathname === '/'
+  const onLibrary = pathname === LIBRARY_PATH
   // Off the library page, a view starts a fresh library rather than carrying
   // the book page's (empty) params.
-  const current = onLibrary ? parseLibraryQuery(params) : parseLibraryQuery(new URLSearchParams())
+  // The saved sort, so a view link keeps your order without spelling it out.
+  const fallbackSort = defaultSort()
+  const current = parseLibraryQuery(onLibrary ? params : new URLSearchParams(), fallbackSort)
 
   const hrefFor = (status: BookStatus | null) => {
-    const next = writeLibraryQuery(onLibrary ? params : new URLSearchParams(), {
-      ...current,
-      statuses: status ? [status] : [],
-    }).toString()
-    return next ? `/?${next}` : '/'
+    const next = writeLibraryQuery(
+      onLibrary ? params : new URLSearchParams(),
+      { ...current, statuses: status ? [status] : [] },
+      fallbackSort,
+    ).toString()
+    return next ? `${LIBRARY_PATH}?${next}` : LIBRARY_PATH
   }
   const isActive = (status: BookStatus | null) =>
     onLibrary &&
@@ -52,6 +55,9 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
         <span className="sidebar-label" id="sidebar-library">
           Library
         </span>
+        <Link to="/" className="sidebar-link" aria-current={pathname === '/' ? 'page' : undefined}>
+          Home
+        </Link>
         {VIEWS.map((view) => (
           <Link
             key={view.label}
@@ -62,6 +68,13 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
             {view.label}
           </Link>
         ))}
+        <Link
+          to="/authors"
+          className="sidebar-link"
+          aria-current={pathname === '/authors' || pathname.startsWith('/authors/') ? 'page' : undefined}
+        >
+          Authors
+        </Link>
       </nav>
 
       <div className="sidebar-account">

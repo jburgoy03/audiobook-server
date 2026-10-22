@@ -5,6 +5,7 @@ import type { BookDetail } from '../api/types'
 import { Blurb } from '../components/Blurb'
 import { Cover } from '../components/Cover'
 import { BackIcon } from '../components/Icons'
+import { authorHref, authorSlug } from '../library/authors'
 import { Player } from '../player/Player'
 
 export function BookPage() {
@@ -52,7 +53,16 @@ function BookView({ id }: { id: string }) {
             <div className="book-heading">
               <h1>{book.title}</h1>
               {book.subtitle && <p className="book-subtitle">{book.subtitle}</p>}
-              <p className="book-credit">by {book.author ?? 'Unknown author'}</p>
+              <p className="book-credit">
+                by{' '}
+                {book.author && authorSlug(book.author) !== '' ? (
+                  <Link to={authorHref(book.author)} className="author-link">
+                    {book.author}
+                  </Link>
+                ) : (
+                  (book.author ?? 'Unknown author')
+                )}
+              </p>
               {book.narrator && <p className="muted">Read by {book.narrator}</p>}
               {book.credit && <p className="muted">{book.credit}</p>}
             </div>

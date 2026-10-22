@@ -3,14 +3,17 @@
 // site data) and the player must still work without it, just without memory.
 //
 // Positions themselves live in the progress store (progress.ts), which syncs with
-// the server; this file only persists its offline cache. Speed, volume and the
-// library layout stay per browser.
+// the server; this file only persists its offline cache. Speed, volume, the
+// library layout and the library sort stay per browser.
+
+import { SORT_KEYS, type SortKey } from '../library/search'
 
 const RATE_KEY = 'audiobook:rate'
 const VOLUME_KEY = 'audiobook:volume'
 const DEVICE_KEY = 'audiobook:device'
 const PROGRESS_KEY = 'audiobook:progress'
 const LIBRARY_VIEW_KEY = 'audiobook:libraryView'
+const LIBRARY_SORT_KEY = 'audiobook:librarySort'
 // Before sync, each book had its own key. Read once, uploaded, then removed.
 const LEGACY_POSITION_PREFIX = 'audiobook:position:'
 
@@ -42,6 +45,18 @@ export function loadLibraryView(): LibraryView | null {
 
 export function saveLibraryView(view: LibraryView): void {
   write(LIBRARY_VIEW_KEY, view)
+}
+
+// ---- Library sort: the last order picked, per browser ----
+
+/** The saved sort, or null if this browser never picked one (or saved one that no longer exists). */
+export function loadLibrarySort(): SortKey | null {
+  const sort = read(LIBRARY_SORT_KEY)
+  return sort !== null && (SORT_KEYS as readonly string[]).includes(sort) ? (sort as SortKey) : null
+}
+
+export function saveLibrarySort(sort: SortKey): void {
+  write(LIBRARY_SORT_KEY, sort)
 }
 
 // ---- Playback speed: one setting for every book, per browser ----

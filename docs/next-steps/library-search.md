@@ -233,3 +233,29 @@ other filters: AND.
   "apply suggestions where a category maps to an existing genre" step would earn
   its place then. Note in `self-hosting.md`, not tier 1.
 - Android: render `genres` from the list and filter locally, same as the web.
+
+---
+
+## Milestone 1b: home shelves and authors
+
+**Shipped 2026-10-22.** At ~100 books the single All books grid was still a long
+scroll, so the library got entry points instead of pagination.
+
+- `/` is now **Home**: Continue listening, then sideways rows (Recently added,
+  Start something new, Short listens, Authors), each with See all into All books
+  with a query. Choices in `web/src/library/shelves.ts` (tested).
+- **All books moved to `/library`**; search, sort and status live there. Typing in
+  the masthead search on Home moves to `/library?q=…`. Old `/?q=…` links redirect.
+- **Authors**: `/authors` (A–Z, fanned covers) and `/authors/:slug` (title order).
+  The book page's author links there. Grouping in `web/src/library/authors.ts`.
+
+Heuristics, flagged:
+- Short listen = under 6 hours (`SHORT_LISTEN_SECONDS`).
+- Start something new = unstarted books not in Recently added, reshuffled once a
+  day (seeded by the local date), so older books come round.
+- Authors are grouped by normalized author string (case, accents, punctuation
+  ignored). Co-written strings ("A, B") are their own author until real
+  contributor data exists. Author pages sort by title, not series order, until
+  series data exists.
+- The last sort picked on All books is saved per browser and is the default.
+
