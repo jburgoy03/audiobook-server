@@ -31,11 +31,25 @@ export function ShelfRow({
   const row = useRef<HTMLUListElement>(null)
   const [ends, setEnds] = useState({ start: true, end: true })
 
+  // Whether the row is at either end, for the arrows. Runs on scroll, so it must
+  // be cheap: at most once a frame, and a state change only when an end is
+  // reached or left. Setting a fresh object on every scroll event re-rendered
+  // every cover in the row many times a second, which made fast scrolls stutter.
+  const frame = useRef<number | null>(null)
   const measure = useCallback(() => {
-    const el = row.current
-    if (!el) return
-    // A pixel of slack: fractional widths can leave scrollLeft just short of the end.
-    setEnds({ start: el.scrollLeft <= 1, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 1 })
+    if (frame.current !== null) return
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null
+      const el = row.current
+      if (!el) return
+      // A pixel of slack: fractional widths can leave scrollLeft just short of the end.
+      const start = el.scrollLeft <= 1
+      const end = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
+      setEnds((prev) => (prev.start === start && prev.end === end ? prev : { start, end }))
+    })
+  }, [])
+  useEffect(() => () => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current)
   }, [])
 
   useEffect(() => {

@@ -34,12 +34,13 @@ export function Cover({ bookId, title, hasCover, progress, className }: CoverPro
     <div className={['cover', className].filter(Boolean).join(' ')} style={style}>
       {hasCover ? (
         <>
-          <img className="cover-backdrop" src={url} alt="" aria-hidden="true" />
+          <img className="cover-backdrop" src={url} alt="" aria-hidden="true" decoding="async" />
           <img
             className="cover-image"
             src={url}
             alt=""
             loading="lazy"
+            decoding="async"
             onLoad={(e) => {
               const img = e.currentTarget
               setMaxSize(Math.round(Math.max(img.naturalWidth, img.naturalHeight) * MAX_UPSCALE))

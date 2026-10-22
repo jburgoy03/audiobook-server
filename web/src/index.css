@@ -1808,8 +1808,12 @@ button { -webkit-user-select: none; user-select: none; }
 /* While a mouse drags the row (see useDragScroll): no snapping, no selecting. */
 .shelf-row[data-dragging] { scroll-snap-type: none; cursor: grabbing; user-select: none; }
 .shelf-row[data-dragging] a { cursor: grabbing; }
+/* Mouse and trackpad: snap only when a scroll ends near a cover edge. Mandatory
+   snapping fights a trackpad's own momentum (the row jumps back as a slow swipe
+   ends); the arrows and dragging pick cover edges themselves anyway. Touch
+   screens keep mandatory, where it's what a swipe expects. */
 @media (hover: hover) and (pointer: fine) {
-  .shelf-row { cursor: grab; }
+  .shelf-row { cursor: grab; scroll-snap-type: x proximity; }
 }
 
 /*
