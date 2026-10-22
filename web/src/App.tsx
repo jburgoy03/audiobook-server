@@ -3,6 +3,7 @@ import { logout, useAuth } from './auth/auth'
 import { LoginPage } from './auth/LoginPage'
 import { PassphrasePage } from './auth/PassphrasePage'
 import { NowPlayingBar } from './components/NowPlayingBar'
+import { PageScroll } from './components/PageScroll'
 import { Sidebar } from './components/Sidebar'
 import { LibrarySearch } from './library/LibraryToolbar'
 import { AdminPage } from './pages/AdminPage'
@@ -22,6 +23,7 @@ export default function App() {
     // Outside the auth gate, so the URL survives signing in: a reload of
     // /books/:id with an expired session comes back to that book.
     <BrowserRouter>
+      <PageScroll />
       {/* Signed in, wide screens get a sidebar beside everything else (see
           "Sidebar" in index.css); narrower ones keep the masthead's links. */}
       <div className="shell" data-sidebar={signedIn ? '' : undefined}>

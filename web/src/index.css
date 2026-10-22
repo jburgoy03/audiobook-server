@@ -1539,6 +1539,19 @@ button { -webkit-user-select: none; user-select: none; }
     box-shadow: 0 0 0 100vmax var(--page);
     clip-path: inset(0 -100vmax);
   }
+
+  /* Every other page: the whole plain masthead stays pinned, so the wordmark
+     (the way home) is never more than a glance away. Only part of the top
+     padding scrolls off, which keeps the bar short; the ribbon then hangs from
+     the top of the screen instead of the top of the page. */
+  .masthead:not(:has(.library-toolbar)) {
+    position: sticky;
+    top: -0.75rem;
+    z-index: 20;
+    background: var(--page);
+    box-shadow: 0 0 0 100vmax var(--page);
+    clip-path: inset(0 -100vmax);
+  }
 }
 
 .library-empty { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 1rem; }
