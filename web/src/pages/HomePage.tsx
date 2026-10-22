@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Link, Navigate, useLocation } from 'react-router'
+import { Navigate, useLocation } from 'react-router'
 import { AuthorCard } from '../components/AuthorCard'
 import { BookTile, LibraryNotice } from '../components/BookTiles'
 import { ShelfRow } from '../components/ShelfRow'
@@ -20,8 +20,8 @@ import { useActiveBookId } from '../player/nowPlaying'
 /**
  * The home page: what you're listening to, then short rows that each open onto
  * part of the library, so nobody has to scroll every book to find one. The full
- * list is at /library (All books), reached from each row's See all, the browse
- * links, the sidebar, or by searching.
+ * list is at /library (All books), reached from each row's See all, the links
+ * under the search box (phones and tablets), the sidebar, or by searching.
  *
  * Shelves with nothing on them are left out, so a new or small library doesn't
  * show empty rows.
@@ -69,16 +69,6 @@ export function HomePage() {
 
   return (
     <>
-      {/* Phones and tablets have no sidebar, so the way into the full lists is here. */}
-      <nav className="browse" aria-label="Browse">
-        <Link to={LIBRARY_PATH} className="pill">
-          All books <span className="browse-count">{books.length}</span>
-        </Link>
-        <Link to="/authors" className="pill">
-          Authors <span className="browse-count">{shelves.authors.length}</span>
-        </Link>
-      </nav>
-
       <ContinueShelf books={books} progress={progress} entries={entries} />
 
       <ShelfRow id="recent-heading" title="Recently added" seeAll={`${LIBRARY_PATH}?sort=added`}>

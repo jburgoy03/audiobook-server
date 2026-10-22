@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import { CloseIcon, SearchIcon } from '../components/Icons'
 import { LIBRARY_PATH, useLibraryQuery } from './libraryQuery'
 import { BOOK_STATUSES, SORT_KEYS, SORT_LABELS, STATUS_LABELS, type BookStatus, type SortKey } from './search'
@@ -48,12 +48,13 @@ function isEditable(target: EventTarget | null): boolean {
 export function LibrarySearch() {
   const { pathname } = useLocation()
   if (pathname !== '/' && pathname !== LIBRARY_PATH) return null
-  // Home shows the search alone: chips and sort there would only jump to All
-  // books, which reads as if they'd filter the shelves.
-  return <LibraryToolbar searchOnly={pathname === '/'} />
+  // Home shows the search, then links to the full lists instead of chips and
+  // sort: those would only jump to All books, which reads as if they'd filter
+  // the shelves.
+  return <LibraryToolbar onHome={pathname === '/'} />
 }
 
-function LibraryToolbar({ searchOnly }: { searchOnly: boolean }) {
+function LibraryToolbar({ onHome }: { onHome: boolean }) {
   const [query, onChange] = useLibraryQuery()
   const input = useRef<HTMLInputElement>(null)
   const timer = useRef<number | undefined>(undefined)
@@ -158,7 +159,17 @@ function LibraryToolbar({ searchOnly }: { searchOnly: boolean }) {
         )}
       </div>
 
-      {!searchOnly && (
+      {onHome ? (
+        // The sidebar has these on wide screens, so CSS hides them there.
+        <nav className="library-filters library-browse" aria-label="Browse">
+          <Link to={LIBRARY_PATH} className="pill chip">
+            All books
+          </Link>
+          <Link to="/authors" className="pill chip">
+            Authors
+          </Link>
+        </nav>
+      ) : (
         <div className="library-filters">
           <div className="library-status" role="group" aria-label="Status">
             {BOOK_STATUSES.map((status) => (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Link } from 'react-router'
 import { BackIcon, ForwardIcon } from './Icons'
 
@@ -8,9 +8,11 @@ import { BackIcon, ForwardIcon } from './Icons'
  *
  * Items are sized to the page's grid tracks plus a sliver of the next one, so a
  * cut-off cover on the right edge says "there's more this way" without an arrow.
- * Touch and trackpads scroll the row directly; a mouse has no sideways scroll,
- * so pointer screens also get previous and next buttons, which page by most of
- * a row and disable at either end.
+ *
+ * Touch and trackpads scroll the row natively. A mouse gets two ways: previous
+ * and next buttons that page by most of a row, and dragging (see useDragScroll).
+ * The plain wheel is deliberately left to the page: turning it sideways over a
+ * row would trap vertical scrolling whenever the cursor rests on one.
  */
 export function ShelfRow({
   id,
@@ -44,6 +46,8 @@ export function ShelfRow({
     observer.observe(el)
     return () => observer.disconnect()
   }, [measure, children])
+
+  useDragScroll(row)
 
   const page = (direction: 1 | -1) => {
     const el = row.current
@@ -80,4 +84,107 @@ export function ShelfRow({
       </ul>
     </section>
   )
+}
+
+// How far a release keeps gliding: velocity (px/ms) times this many ms.
+const THROW_MS = 320
+
+/**
+ * Click-and-drag scrolling for a mouse, so a row moves under the hand the way it
+ * does under a finger: the row follows the pointer, and on release it keeps
+ * going in proportion to how fast it was thrown, then settles on the nearest
+ * cover edge.
+ *
+ * Mouse only. Touch and pens already scroll natively, and taking their pointer
+ * events would fight the browser's own momentum.
+ *
+ * A press that moves less than a few pixels is a click and opens the book. A
+ * real drag swallows the click it ends with, so letting go over a cover doesn't
+ * open it. Snapping is switched off while dragging (it would yank the row to
+ * the nearest cover on every move) and back on once the glide ends.
+ */
+function useDragScroll(row: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = row.current
+    if (!el) return
+
+    let pointerId: number | null = null
+    let startX = 0
+    let startLeft = 0
+    let lastX = 0
+    let lastT = 0
+    let velocity = 0
+    let dragging = false
+
+    const settle = () => delete el.dataset.dragging
+
+    const down = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return
+      pointerId = e.pointerId
+      startX = lastX = e.clientX
+      lastT = e.timeStamp
+      startLeft = el.scrollLeft
+      velocity = 0
+      dragging = false
+    }
+
+    const move = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return
+      const dx = e.clientX - startX
+      if (!dragging) {
+        if (Math.abs(dx) < 6) return
+        dragging = true
+        el.setPointerCapture(e.pointerId)
+        el.dataset.dragging = ''
+      }
+      el.scrollLeft = startLeft - dx
+      const dt = e.timeStamp - lastT
+      // Smoothed, so one jittery last sample doesn't decide the throw.
+      if (dt > 0) velocity = 0.7 * ((e.clientX - lastX) / dt) + 0.3 * velocity
+      lastX = e.clientX
+      lastT = e.timeStamp
+    }
+
+    const up = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return
+      pointerId = null
+      if (!dragging) return
+
+      const swallow = (click: MouseEvent) => {
+        click.preventDefault()
+        click.stopPropagation()
+      }
+      el.addEventListener('click', swallow, { capture: true, once: true })
+      // If no click follows (released outside the row), don't eat the next real one.
+      window.setTimeout(() => el.removeEventListener('click', swallow, { capture: true }), 50)
+
+      // A pause before letting go is a placement, not a throw.
+      const still = e.timeStamp - lastT > 80
+      const projected = el.scrollLeft - (still ? 0 : velocity * THROW_MS)
+      const first = el.firstElementChild as HTMLElement | null
+      const gap = parseFloat(getComputedStyle(el).columnGap) || 0
+      const step = first ? first.offsetWidth + gap : 1
+      const target = Math.max(0, Math.round(projected / step) * step)
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      el.scrollTo({ left: target, behavior: reduce ? 'auto' : 'smooth' })
+      if ('onscrollend' in el) el.addEventListener('scrollend', settle, { once: true })
+      else window.setTimeout(settle, 600)
+    }
+
+    // Links and images are natively draggable; a drag here means scroll.
+    const noNativeDrag = (e: DragEvent) => e.preventDefault()
+
+    el.addEventListener('pointerdown', down)
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', up)
+    el.addEventListener('dragstart', noNativeDrag)
+    return () => {
+      el.removeEventListener('pointerdown', down)
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', up)
+      el.removeEventListener('dragstart', noNativeDrag)
+    }
+  }, [row])
 }

@@ -1770,9 +1770,8 @@ button { -webkit-user-select: none; user-select: none; }
   next one, so the cut-off cover on the right edge is the hint that it scrolls.
   Pointer screens also get quiet previous/next buttons beside See all.
 */
-.browse { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 2rem; }
-.browse .pill { text-decoration: none; font-size: 1rem; }
-.browse-count { margin-left: 0.3rem; color: var(--muted); font-variant-numeric: lining-nums tabular-nums; }
+/* Home's links to the full lists ride in the masthead's chip line. */
+.library-browse .chip { text-decoration: none; }
 
 .section-note { color: var(--muted); font-size: 1.0625rem; }
 /* Phones: the heading, arrows and See all already fill the line. */
@@ -1796,7 +1795,8 @@ button { -webkit-user-select: none; user-select: none; }
   padding: 4px 0;
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: calc((100% - var(--cols) * var(--col-gap)) / (var(--cols) + var(--peek)));
+  --row-cols: var(--cols);
+  grid-auto-columns: calc((100% - var(--row-cols) * var(--col-gap)) / (var(--row-cols) + var(--peek)));
   column-gap: var(--col-gap);
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -1805,6 +1805,33 @@ button { -webkit-user-select: none; user-select: none; }
 }
 .shelf-row::-webkit-scrollbar { display: none; }
 .shelf-row > li { scroll-snap-align: start; }
+/* While a mouse drags the row (see useDragScroll): no snapping, no selecting. */
+.shelf-row[data-dragging] { scroll-snap-type: none; cursor: grabbing; user-select: none; }
+.shelf-row[data-dragging] a { cursor: grabbing; }
+@media (hover: hover) and (pointer: fine) {
+  .shelf-row { cursor: grab; }
+}
+
+/*
+  Phones: smaller covers, about two and three-quarters across rather than two
+  and a third, so each shelf is shorter and more of them fit on a screen.
+  Titles stop at two lines and authors at one, so tiles stay level.
+*/
+@media (max-width: 39.99rem) {
+  .shelf-row { --row-cols: 2.4; --col-gap: 0.75rem; }
+  .shelf-row .cover,
+  .shelf-row .author-stack { margin-bottom: 0.5rem; }
+  .shelf-row .book-title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    font-size: 1.0625rem;
+  }
+  .shelf-row .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9375rem; }
+  .shelf-row .book-length { font-size: 0.875rem; }
+  .shelf-row .cover-cloth span { font-size: 0.9375rem; }
+}
 
 .shelf-arrows { display: none; }
 @media (hover: hover) {
@@ -1857,7 +1884,7 @@ button { -webkit-user-select: none; user-select: none; }
   .author-link:hover { color: var(--ink); text-decoration-color: currentColor; }
 }
 
-/* The sidebar has these links, so wide screens drop the row. */
+/* The sidebar has these links, so wide screens drop them. */
 @media (min-width: 64em) {
-  .shell[data-sidebar] .browse { display: none; }
+  .shell[data-sidebar] .library-browse { display: none; }
 }
