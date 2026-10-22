@@ -1,5 +1,5 @@
 import type { BookSummary } from '../api/types'
-import type { Author } from './authors'
+import { byBookCount, type Author } from './authors'
 import { compareBooks, type BookStatus } from './search'
 
 /**
@@ -60,8 +60,7 @@ export function startSomethingNew(
 
 /** Authors with the most books first, then by name. */
 export function topAuthors(authors: readonly Author[], size = SHELF_SIZE): Author[] {
-  // groupByAuthor already sorted by name, and sort is stable.
-  return [...authors].sort((a, b) => b.books.length - a.books.length).slice(0, size)
+  return byBookCount(authors).slice(0, size)
 }
 
 /** Today in local time, "2026-10-22": the seed for startSomethingNew. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BookSummary } from '../api/types'
-import { authorHref, authorSlug, coverBooks, groupByAuthor } from './authors'
+import { authorHref, authorSlug, byBookCount, coverBooks, groupByAuthor } from './authors'
 
 let next = 0
 const book = (author: string | null, title = `Book ${++next}`, hasCover = true): BookSummary => ({
@@ -49,5 +49,12 @@ describe('coverBooks', () => {
   it('prefers books with cover art, then title order', () => {
     const [author] = groupByAuthor([book('A', 'Charlie'), book('A', 'Alpha', false), book('A', 'Bravo')])
     expect(coverBooks(author, 3).map((b) => b.title)).toEqual(['Bravo', 'Charlie', 'Alpha'])
+  })
+})
+
+describe('byBookCount', () => {
+  it('puts the most books first, then name order', () => {
+    const authors = groupByAuthor([book('Rowling'), book('Murakami'), book('Murakami'), book('Austen'), book('Rowling')])
+    expect(byBookCount(authors).map((a) => a.name)).toEqual(['Murakami', 'Rowling', 'Austen'])
   })
 })

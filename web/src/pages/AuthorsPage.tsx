@@ -1,16 +1,16 @@
 import { useMemo } from 'react'
 import { AuthorCard } from '../components/AuthorCard'
 import { LibraryNotice } from '../components/BookTiles'
-import { groupByAuthor } from '../library/authors'
+import { byBookCount, groupByAuthor } from '../library/authors'
 import { useBooks } from '../library/useLibrary'
 
 /**
- * Every author, A to Z, each with a few covers and a book count. Far shorter to
- * scan than every book: most authors have several.
+ * Every author, most books first, each with a few covers and a book count. The
+ * authors you've collected most of lead; authors with the same count are A to Z.
  */
 export function AuthorsPage() {
   const { books, error } = useBooks()
-  const authors = useMemo(() => groupByAuthor(books ?? []), [books])
+  const authors = useMemo(() => byBookCount(groupByAuthor(books ?? [])), [books])
 
   if (!books || books.length === 0 || error) return <LibraryNotice books={books} error={error} />
 

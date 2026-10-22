@@ -64,6 +64,14 @@ export function groupByAuthor(books: readonly BookSummary[]): Author[] {
   return authors.sort((a, b) => collator.compare(a.name, b.name) || a.slug.localeCompare(b.slug))
 }
 
+/**
+ * Most books first; equal counts stay in name order. Takes a list already in
+ * name order (groupByAuthor's) and relies on sort being stable.
+ */
+export function byBookCount(authors: readonly Author[]): Author[] {
+  return [...authors].sort((a, b) => b.books.length - a.books.length)
+}
+
 /** Up to `count` books to show for an author: ones with cover art first, then by title. */
 export function coverBooks(author: Author, count: number): BookSummary[] {
   return [...author.books]

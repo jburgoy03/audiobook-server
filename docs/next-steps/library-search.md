@@ -246,7 +246,7 @@ scroll, so the library got entry points instead of pagination.
   with a query. Choices in `web/src/library/shelves.ts` (tested).
 - **All books moved to `/library`**; search, sort and status live there. Typing in
   the masthead search on Home moves to `/library?q=…`. Old `/?q=…` links redirect.
-- **Authors**: `/authors` (A–Z, fanned covers) and `/authors/:slug` (title order).
+- **Authors**: `/authors` (most books first, then A–Z; fanned covers) and `/authors/:slug` (title order).
   The book page's author links there. Grouping in `web/src/library/authors.ts`.
 
 Heuristics, flagged:
