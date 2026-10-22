@@ -68,7 +68,7 @@ fix. The README should say so plainly, with the jump offer in a screenshot.
 4. **First-run protection** (item 5): a setup token printed in the container log
    (recommended), or the open first-visitor wizard Jellyfin uses.
 5. **Default port.** 8080 inside; the example compose publishes something less
-   collision-prone (8080 is often taken: Dean's own server has qBittorrent there).
+   collision-prone (8080 is often taken: Dean's own server already uses it).
 
 ## Milestone 1: a friend can install it
 

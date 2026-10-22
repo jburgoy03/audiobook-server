@@ -35,7 +35,7 @@ services:
       # Bound to the Tailscale address only: reachable from the tailnet, not the
       # LAN. Public traffic never uses this port; it arrives through the tunnel.
       # Host port 5043, the same as the API in development. Not 8080: on this
-      # server, qBittorrent's web UI (published by gluetun) is likely there.
+      # server, another service already uses it.
       - "${BIND_ADDRESS:?set BIND_ADDRESS to the server's Tailscale IP}:${HOST_PORT:-5043}:8080"
     networks:
       - db

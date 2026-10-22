@@ -24,8 +24,7 @@ Why these choices:
 
 - **ffmpeg is installed in the image.** The `aspnet` base has none, and the scanner
   needs `ffprobe` (durations, chapters, mp3 packet counts) and `ffmpeg` (covers).
-- **Host port 5043, not 8080.** On this server, qBittorrent's web UI (published by
-  Gluetun) is likely on 8080.
+- **Host port 5043, not 8080.** Another service on this server already uses 8080.
 - **Same library path inside and out.** The library was scanned outside a container,
   so `Libraries.RootPath` is `/mnt/media/audiobooks`. Mounting it elsewhere would
   make every stream 404.
@@ -238,98 +237,11 @@ Nothing else is needed: no database edits, no restart. If `./AudiobookServer.Api
 ever missing from an image, `dotnet AudiobookServer.Api.dll admin …` is the same
 command.
 
-## The server's other open doors
+## Exposure
 
 The audiobook stack has no inbound port: the tunnel dials out, the API is published
-on the Tailscale address only, and Postgres on `127.0.0.1`. The same machine runs
-other stacks, though. Their exposure was reviewed on 2026-10-02 (`sudo ss -tlnp`) and
-**mostly hardened the same day** (results below).
-
-**Accepted risk (Dean, 2026-10-02): Jellyfin's port 8096 is forwarded on the Spectrum
-gateway**, over plain HTTP, for one friend (`jdbmedia.duckdns.org`). Barely used, so
-the risk is known and judged minimal. What it means: sign-ins and session tokens cross
-the internet unencrypted; bots scan 8096 and try passwords; some Jellyfin endpoints
-answer without sign-in (item images and metadata by ID); and Jellyfin runs with
-`network_mode: host`. Since 2026-10-02 a compromise of it is contained much better:
-Jellyfin sees only `movies` and `tv`, read-only, and Portainer is gone. Dean's own
-admin account travels **only over Tailscale** (`http://100.83.139.4:8096`, the iOS
-app); a separate non-admin account is for untrusted devices. The real fix, if usage
-grows: share the server with the friend over Tailscale and remove the forward.
-
-**Still LAN-only and published on all interfaces** (not forwarded): SSH 22,
-qBittorrent web UI 8080 (via Gluetun), Radarr 7878, Sonarr 8989, Prowlarr 9696 (all
-three now require a login). Docker's published ports bypass `ufw`, so the router (and
-its IPv6 firewall) is the boundary. **Removed 2026-10-02:** Portainer 9000,
-Audiobookshelf 13378, FlareSolverr 8191 (unpublished), qBittorrent 6881.
-
-**Inbound IPv6: blocked (tested 2026-10-02).** The server has public IPv6
-(`2603:6010:b600:564::145c` from DHCPv6, plus a SLAAC address) and Docker listens on
-`[::]`. From a phone on cellular (test-ipv6.com 9/10), both addresses on 13378 timed
-out, so the gateway's IPv6 firewall drops inbound. **Re-run after any gateway swap or
-factory reset**: if it ever loads, turn the gateway's IPv6 firewall on, or publish
-ports IPv4-only (`"0.0.0.0:<port>:<port>"`).
-
-Hardening checklist:
-
-- [x] IPv6 test (2026-10-02): blocked, see above.
-- [x] Router (2026-10-02): forwarding lists **TCP 8096 → 192.168.1.118 only**; two
-      stale forwards from the abandoned Caddy attempt ("Caddy HTTP"/"Caddy HTTPS",
-      80/443) deleted; **UPnP off**. Outside check from cellular: DuckDNS 8096 loads,
-      9000 and 13378 time out. Note: the Spectrum app labels the server "Windows";
-      don't turn off its **Reserve IP Address** toggle (it deletes every forward).
-- [x] Arr stack (2026-10-02, `/opt/docker/arrstack/`, backup
-      `docker-compose.yml.bak-2026-10-02`): FlareSolverr's 8191 and Gluetun's 6881
-      (TCP/UDP) unpublished; **Audiobookshelf removed** (unused; it also mounted
-      `/mnt/media/audiobooks` read-write). Its config is still in
-      `arrstack/audiobookshelf/`; restore with the `.bak` compose. Checked: Prowlarr's
-      FlareSolverr test passes (`http://flaresolverr:8191`), Gluetun exits via Mullvad
-      (`68.235.46.170`), qBittorrent downloads. `readarr/` and `lazylibrarian/` are
-      leftover folders with no containers.
-- [x] Radarr, Sonarr, Prowlarr (2026-10-02): Forms login, required for local addresses
-      too, new strong passwords. Locked out: set `<AuthenticationMethod>None` in that
-      app's `config/config.xml` and restart it.
-- [x] Portainer (2026-10-02): **removed** rather than locked down. It was never signed
-      into (no known admin account) and everything it does is done over SSH. Its data
-      volume `portainer_data` is kept. To restore (Tailscale-only, set the password
-      within five minutes of first start):
-      `docker run -d --name portainer --restart unless-stopped -p 100.83.139.4:9000:9000 -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data portainer/portainer-ce`
-- [x] Jellyfin (2026-10-02, backup `jellyfin/docker-compose.yml.bak-2026-10-02`):
-      - Media: instead of all of `/mnt/media` read-write (which included
-        `/mnt/media/docker`, every container's volumes and Postgres data), only
-        `/mnt/media/movies:/media/movies:ro` and `/mnt/media/tv:/media/tv:ro`, same
-        container paths so libraries didn't change. Verified: a write fails with
-        "Read-only file system", `/media` holds only the two folders, playback and
-        metadata refresh work. "Save artwork into media folders" and the Nfo saver are
-        off, so nothing needs write access. Deleting media from Jellyfin no longer
-        works (intended).
-      - Updated 10.11.10 → **10.11.11, pinned** (`jellyfin/jellyfin:10.11.11`, not
-        `latest`, which now points at the 12.x line). Config backup taken stopped:
-        `jellyfin/config.bak-2026-10-02-10.11.10` (4.1G).
-      - Passwords strong and unique; failed-login lockout on for every account (0 =
-        three tries for users, five for admins); friend's account non-admin. Admin
-        password recovered with Forgot Password → PIN file in `config/`.
-- [ ] Jellyfin off host networking: pass `/dev/dri` through, publish 8096 normally,
-      confirm VAAPI still transcodes (force a transcode, check the dashboard). Revert if
-      not.
-- [ ] SSH keys only. Effective config (`sudo sshd -T`, 2026-10-02):
-      `passwordauthentication yes`, `permitrootlogin without-password`,
-      `kbdinteractiveauthentication no`. Plan: first confirm key login with passwords
-      refused, from a second terminal:
-      `ssh -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no media "echo key login works"`;
-      then a drop-in (e.g. `/etc/ssh/sshd_config.d/10-hardening.conf`) with
-      `PasswordAuthentication no` and `PermitRootLogin no`, `sudo sshd -t`, restart
-      sshd with the current session open, re-check `sshd -T`. Tailscale SSH is the way
-      back in. Never forward 22.
-- [ ] Rotate the Mullvad WireGuard key: the private key sits in plain text in
-      `arrstack/docker-compose.yml` and was pasted into a chat on 2026-10-02. Revoke the
-      device in the Mullvad account, generate a new key, and move it into
-      `arrstack/.env` (`WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}`).
-- [ ] Re-run `sudo ss -tlnp | grep -v '127.0.0.1\|100.83.139.4\|::1'` and compare with
-      the 2026-10-02 list (expected gone: 9000, 13378, 8191, 6881). Check what
-      `matchday` publishes (not in the original review).
-- [ ] Later: Jellyfin runs as root (`config`/`cache` root-owned); a `user:` line would
-      need those re-owned. Jellyfin 12.x is a one-way database migration: its own
-      session, with release notes and a config backup.
+on the Tailscale address only, and Postgres on `127.0.0.1`. The machine runs other
+services too; their exposure review is kept outside this public repo.
 
 ## Still manual
 
