@@ -3,6 +3,7 @@ import { api } from '../api/client'
 import type { BookDetail } from '../api/types'
 import { verifySession } from '../auth/auth'
 import { progressStore } from './progress'
+import { crossedBoundary, FADE_SECONDS, fadeLevel, sleepStore } from './sleepTimer'
 import { deviceId, loadRate, saveRate } from './storage'
 import { canSetVolume, elementVolume, volumeStore } from './volume'
 import { chapterIndexAt, clampPosition, locate, totalDuration } from './timeline'
@@ -60,6 +61,12 @@ export function useBookPlayer(
     startAt !== undefined ? clampPosition(book.files, startAt) : resumePosition(book),
   )
   const positionRef = useRef(position)
+  // The last time update while playing (performance.now() and book position), for
+  // the sleep timer: how much playback time passed, and whether the position got
+  // there by playing or by a seek. Cleared on play, pause and seek.
+  const tickRef = useRef<{ wall: number; position: number } | null>(null)
+  // seek is defined after the element's effect, which needs it for the sleep timer.
+  const seekRef = useRef<(target: number) => void>(() => {})
 
   const [playing, setPlaying] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -151,14 +158,51 @@ export function useBookPlayer(
     audioRef.current = audio
 
     // Volume is app-wide (volume.ts): apply it now and follow it. Files within the
-    // book reuse this element, so a file boundary can't lose it.
+    // book reuse this element, so a file boundary can't lose it. A running-out
+    // sleep timer fades it (sleepTimer.ts); where the volume can't be set (iPhone
+    // Safari), there's no fade and the timer just pauses.
     const applyVolume = () => {
       const { level, muted } = volumeStore.get()
-      if (canSetVolume) audio.volume = elementVolume(level)
+      if (canSetVolume) audio.volume = elementVolume(level) * fadeLevel(sleepStore.get())
       audio.muted = muted
     }
     applyVolume()
     const unsubscribeVolume = volumeStore.subscribe(applyVolume)
+    const unsubscribeSleep = sleepStore.subscribe(applyVolume)
+
+    // Driven by the element's time updates rather than a timer of our own: browsers
+    // throttle timers in background tabs to once a minute, but keep delivering a
+    // playing element's events (the same thing that loads the next file with the
+    // screen locked). Time is measured, not counted in updates, so a late update
+    // still counts the right amount.
+    const followSleepTimer = (position: number) => {
+      const now = performance.now()
+      const last = tickRef.current
+      tickRef.current = { wall: now, position }
+      if (!last) return
+      const elapsed = (now - last.wall) / 1000
+      const timer = sleepStore.get()
+
+      if (timer.kind === 'minutes') {
+        // Pause before the store turns off, or the volume would come back up for
+        // a moment first.
+        if (timer.remaining - elapsed <= 0) {
+          audio.pause()
+          // Step back over the faded stretch (in book seconds, so speed counts).
+          seekRef.current(position - FADE_SECONDS * audio.playbackRate)
+          save()
+        }
+        sleepStore.countDown(elapsed)
+      } else if (timer.kind === 'chapter') {
+        const boundary = crossedBoundary(book.chapters, last.position, position, elapsed * audio.playbackRate)
+        if (boundary === null) return
+        audio.pause()
+        sleepStore.off()
+        // Parked on the boundary, so Play starts the next chapter from its first word.
+        seekRef.current(boundary)
+        save()
+      }
+    }
 
     const onLoadedMetadata = () => {
       if (pendingSeekRef.current !== null) {
@@ -175,25 +219,41 @@ export function useBookPlayer(
     const onTimeUpdate = () => {
       const file = book.files[fileIndexRef.current]
       if (file && pendingSeekRef.current === null) {
-        updatePosition(file.startOffsetSeconds + audio.currentTime)
+        const position = file.startOffsetSeconds + audio.currentTime
+        updatePosition(position)
+        if (!audio.paused) followSleepTimer(position)
       }
     }
 
     const onEnded = () => {
       const next = fileIndexRef.current + 1
       if (next < book.files.length) {
-        loadFile(next, 0, true)
+        // An end-of-chapter timer, and a chapter starts where this file ends (one
+        // chapter per file is common): the time updates never see the boundary,
+        // because the file ends first. Load the next file but don't play it.
+        const boundary = book.files[next].startOffsetSeconds
+        const sleepHere =
+          sleepStore.get().kind === 'chapter' &&
+          book.chapters.some((c) => Math.abs(c.startOffsetSeconds - boundary) < 1)
+        if (sleepHere) sleepStore.off()
+        loadFile(next, 0, !sleepHere)
         save()
       } else {
         updatePosition(totalDuration(book.files))
         setPlaying(false)
         finishedRef.current = true
+        // The book stopped by itself; a timer has nothing left to do.
+        sleepStore.off()
         save()
       }
     }
 
-    const onPlay = () => setPlaying(true)
+    const onPlay = () => {
+      tickRef.current = null
+      setPlaying(true)
+    }
     const onPause = () => {
+      tickRef.current = null
       setPlaying(false)
       save()
     }
@@ -240,12 +300,13 @@ export function useBookPlayer(
       audio.removeEventListener('playing', onPlaying)
       audio.removeEventListener('error', onError)
       unsubscribeVolume()
+      unsubscribeSleep()
       audio.pause()
       audio.removeAttribute('src')
       audio.load()
       audioRef.current = null
     }
-  }, [book.id, book.files, loadFile, save, updatePosition, autoplayOnLoad])
+  }, [book.id, book.files, book.chapters, loadFile, save, updatePosition, autoplayOnLoad])
 
   // Unmounting (another book activated, or signing out) saves synchronously in the
   // commit, not later with the passive effect above: sign-out waits for this save
@@ -284,6 +345,7 @@ export function useBookPlayer(
       const { index, offset } = locate(book.files, t)
 
       finishedRef.current = false
+      tickRef.current = null
       if (index === fileIndexRef.current) {
         if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) audio.currentTime = offset
         else pendingSeekRef.current = offset
@@ -294,6 +356,10 @@ export function useBookPlayer(
     },
     [book.files, loadFile, updatePosition],
   )
+
+  useLayoutEffect(() => {
+    seekRef.current = seek
+  })
 
   const skip = useCallback((delta: number) => seek(positionRef.current + delta), [seek])
 

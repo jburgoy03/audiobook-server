@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { BookDetail } from '../api/types'
 import { LevelMeter, NextIcon, PlayPauseIcon, PreviousIcon, SkipIcon } from '../components/Icons'
 import { ChapterTimeline } from './ChapterTimeline'
 import { JumpPrompt } from './JumpPrompt'
 import { useActivate, useLivePlayer, type Activate } from './nowPlaying'
 import { useProgressEntries } from './progress'
+import { SleepControl } from './SleepControl'
 import { loadRate, saveRate } from './storage'
 import { chapterIndexAt, clampPosition, formatTime, totalDuration } from './timeline'
 import { resumePosition, type BookPlayer } from './useBookPlayer'
@@ -84,7 +85,11 @@ function useIdlePlayer(book: BookDetail, activate: Activate): BookPlayer {
   }
 }
 
-export function Player({ book }: { book: BookDetail }) {
+/**
+ * `beforeChapters` goes between the controls and the chapter list: the blurb, in
+ * the one-column layout (see BookPage).
+ */
+export function Player({ book, beforeChapters }: { book: BookDetail; beforeChapters?: ReactNode }) {
   const activate = useActivate()
   const live = useLivePlayer(book.id)
   const idle = useIdlePlayer(book, activate)
@@ -178,9 +183,14 @@ export function Player({ book }: { book: BookDetail }) {
         </div>
 
         <div className="transport">
-          <span className="status" role="status">
-            {p.error ?? (p.loading ? 'Loading…' : '')}
-          </span>
+          <div className="transport-start">
+            {/* The timer belongs to what's playing, so only the active book shows
+                it. It's app-wide: it keeps running when another book starts. */}
+            {live && <SleepControl />}
+            <span className="status" role="status">
+              {p.error ?? (p.loading ? 'Loading…' : '')}
+            </span>
+          </div>
 
           <div className="controls">
             <button type="button" className="control" onClick={p.previousChapter} aria-label="Previous chapter">
@@ -217,6 +227,8 @@ export function Player({ book }: { book: BookDetail }) {
           </label>
         </div>
       </section>
+
+      {beforeChapters}
 
       {book.chapters.length > 1 && (
         <section className="chapters" aria-labelledby="chapters-heading">

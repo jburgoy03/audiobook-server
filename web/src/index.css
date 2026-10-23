@@ -585,9 +585,11 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
 .book-heading p { margin: 0; }
 .book-credit { font-size: 1.1875rem; font-style: italic; color: var(--muted); }
 
-/* The blurb: its own full-width row under cover and title (the title's column is
-   too narrow on phones), clipped to a few lines with a fade until opened. */
-.blurb { grid-column: 1 / -1; max-width: 40rem; margin-top: 1.25rem; }
+/* The blurb. Below the desktop breakpoint it comes after the player (BookPage
+   moves it), so Play is on the first screen; clipped to a few lines with a fade
+   until opened. On desktop it sits under the title in the left column. */
+.blurb { max-width: 40rem; }
+.player + .blurb { margin-top: 2.5rem; }
 .blurb-body { font-size: 1.0625rem; line-height: 1.5; }
 .blurb-body p { margin: 0; }
 .blurb-body p + p { margin-top: 0.75em; }
@@ -635,7 +637,6 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
     top: 1.5rem;
   }
   .book-cover, .book-heading, .blurb { grid-column: 1; }
-  .blurb { margin-top: 0; }
   /* Desktop shows the whole blurb (Dean's call): no clip, no fade, no More. It can
      be taller than the screen, so a column with a blurb scrolls with the page
      instead of sticking; the player column stays where it is. */
@@ -797,7 +798,19 @@ h2 { font-size: 1.5rem; font-style: italic; font-weight: 400; margin: 0; }
   gap: 0.75rem;
 }
 
-.status { grid-area: status; justify-self: start; color: var(--muted); font-style: italic; }
+.transport-start { grid-area: status; justify-self: start; position: relative; }
+.status { color: var(--muted); font-style: italic; }
+/* With the sleep timer in the cell, the status ("Loading…", an error) hangs just
+   under it instead of beside it: it comes and goes on every seek, and mustn't
+   push the timer around or change the row's height. */
+.transport-start .sleep + .status {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.35rem;
+  font-size: 0.9375rem;
+  white-space: nowrap;
+}
 .speed { grid-area: speed; justify-self: end; }
 
 /* Too narrow for three cells: controls on their own row, then status and speed

@@ -53,10 +53,10 @@ class AndroidBookPlayer(
     private var chapters: List<Chapter> = emptyList()
     private var chaptersFor: String? = null
 
-    // Sleep timer. A deadline on the monotonic clock (immune to the wall clock being
-    // changed), or a chapter end on the book timeline.
-    private var sleepDeadline: Long? = null
-    private var sleepAtSeconds: Double? = null
+    // Sleep timer: the rules are shared (SleepClock); this feeds it the clock and the
+    // position, and carries out what it says. It lives in the app process, which the
+    // playback service keeps alive (same process, foreground, awake while playing).
+    private val sleep = SleepClock()
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = publish()
@@ -78,8 +78,11 @@ class AndroidBookPlayer(
         scope.launch {
             while (true) {
                 if (controller?.isPlaying == true) {
-                    checkSleepTimer()
                     publish()
+                    followSleepTimer()
+                } else {
+                    // Paused or buffering: that time doesn't count down the timer.
+                    sleep.interrupt()
                 }
                 delay(500)
             }
@@ -151,6 +154,8 @@ class AndroidBookPlayer(
         // The last file that starts at or before t (boundaries belong to the next file).
         val index = starts.indexOfLast { it <= t }.coerceAtLeast(0)
         c.seekTo(index, ((t - starts[index]) * 1000).roundToLong())
+        // A jump, not playback: an end-of-chapter timer mustn't read it as a crossing.
+        sleep.interrupt()
         publish()
     }
 
@@ -172,38 +177,27 @@ class AndroidBookPlayer(
     override fun setSpeed(speed: Float) = withController { it.setPlaybackSpeed(speed) }
 
     override fun setSleepTimer(timer: SleepTimer?) {
-        sleepDeadline = null
-        sleepAtSeconds = null
-        when (timer) {
-            null -> Unit
-            is SleepTimer.After -> sleepDeadline = SystemClock.elapsedRealtime() + timer.minutes * 60_000L
-            SleepTimer.EndOfChapter -> {
-                val now = _state.value ?: return
-                // No chapters: the end of the book, which stops anyway.
-                sleepAtSeconds = now.chapterEndSeconds ?: now.durationSeconds
-            }
-        }
+        sleep.set(timer)
+        // Cancelled or replaced mid-fade: back to full volume.
+        withController { it.volume = 1f }
         publish()
     }
 
     /**
-     * Checked every half second while playing. At a chapter end it pauses and then
-     * parks exactly on the boundary (polling overshoots by up to half a second), so
-     * resuming starts the next chapter from its first word.
+     * Every half second while playing. Polling overshoots a chapter end by up to half
+     * a second, so it pauses and then parks exactly on the boundary.
      */
-    private fun checkSleepTimer() {
+    private fun followSleepTimer() {
         val c = controller ?: return
-        val deadline = sleepDeadline
-        if (deadline != null && SystemClock.elapsedRealtime() >= deadline) {
-            sleepDeadline = null
-            c.pause()
-        }
-        val at = sleepAtSeconds ?: return
         val now = _state.value ?: return
-        if (now.positionSeconds >= at - 0.25) {
-            sleepAtSeconds = null
-            c.pause()
-            seekTo(at)
+        when (val action = sleep.tick(SystemClock.elapsedRealtime() / 1000.0, now.positionSeconds, now.speed, chapters)) {
+            SleepAction.None -> Unit
+            is SleepAction.Fade -> c.volume = action.volume
+            is SleepAction.Sleep -> {
+                c.pause()
+                c.volume = 1f
+                seekTo(action.positionSeconds)
+            }
         }
     }
 
@@ -242,8 +236,8 @@ class AndroidBookPlayer(
             chapterEndSeconds = chapter?.endOffsetSeconds,
             chapterNumber = chapter?.let { chapterIndex + 1 },
             chapterCount = chapters.size,
-            sleepRemainingSeconds = sleepDeadline?.let { (it - SystemClock.elapsedRealtime()).coerceAtLeast(0) / 1000.0 },
-            sleepAtChapterEnd = sleepAtSeconds != null,
+            sleepRemainingSeconds = sleep.remainingSeconds,
+            sleepAtChapterEnd = sleep.timer == SleepTimer.EndOfChapter,
             chapters = chapters,
         )
     }

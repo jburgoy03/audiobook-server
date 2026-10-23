@@ -22,7 +22,7 @@ data class NowPlaying(
     /** 1-based, for "Chapter 9 of 21"; null without chapters. */
     val chapterNumber: Int? = null,
     val chapterCount: Int = 0,
-    /** Sleep timer: seconds until it pauses, or [sleepAtChapterEnd]; both empty when off. */
+    /** Sleep timer: playback seconds until it pauses, or [sleepAtChapterEnd]; both empty when off. */
     val sleepRemainingSeconds: Double? = null,
     val sleepAtChapterEnd: Boolean = false,
     /** The book's chapters, for the segmented timeline. */

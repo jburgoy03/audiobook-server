@@ -43,6 +43,8 @@ import dev.deanburgoyne.audiobooks.api.BookDetail
 import dev.deanburgoyne.audiobooks.api.Progress
 import dev.deanburgoyne.audiobooks.downloads.DownloadedBook
 import dev.deanburgoyne.audiobooks.playback.NowPlaying
+import dev.deanburgoyne.audiobooks.playback.SleepTimer
+import dev.deanburgoyne.audiobooks.player.SleepControl
 import dev.deanburgoyne.audiobooks.playback.indexAt
 import dev.deanburgoyne.audiobooks.ui.LevelMeter
 import dev.deanburgoyne.audiobooks.ui.Palette
@@ -70,6 +72,7 @@ fun BookScreen(
     onPlay: (BookDetail, startAt: Double) -> Unit,
     onToggle: () -> Unit,
     onSeek: (Double) -> Unit,
+    onSleepTimer: (SleepTimer?) -> Unit,
     download: DownloadedBook?,
     wifiOnly: Boolean,
     onDownload: (BookDetail) -> Unit,
@@ -96,6 +99,7 @@ fun BookScreen(
                         coverUrl = coverUrl(book),
                         onPlay = onPlay,
                         onToggle = onToggle,
+                        onSleepTimer = onSleepTimer,
                         onChapter = { start -> if (playing != null) onSeek(start) else onPlay(book, start) },
                     ) {
                         DownloadSection(
@@ -135,6 +139,7 @@ private fun BookDetails(
     coverUrl: String?,
     onPlay: (BookDetail, Double) -> Unit,
     onToggle: () -> Unit,
+    onSleepTimer: (SleepTimer?) -> Unit,
     onChapter: (Double) -> Unit,
     downloadSection: @Composable () -> Unit,
 ) {
@@ -196,20 +201,25 @@ private fun BookDetails(
                     )
                 }
                 Spacer(Modifier.height(22.dp))
-                PillButton(
-                    text = when {
-                        playing?.isPlaying == true -> "Pause"
-                        started -> "Resume"
-                        else -> "Play"
-                    },
-                    onClick = { if (playing != null) onToggle() else onPlay(book, position ?: 0.0) },
-                    leading = {
-                        Icon(
-                            if (playing?.isPlaying == true) PlayerIcons.Pause else PlayerIcons.Play,
-                            contentDescription = null, tint = Palette.Page, modifier = Modifier.size(18.dp),
-                        )
-                    },
-                )
+                // Play on the left; once this book is the one loaded, the sleep timer on
+                // the right edge (it belongs to what's playing, as on the web).
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    PillButton(
+                        text = when {
+                            playing?.isPlaying == true -> "Pause"
+                            started -> "Resume"
+                            else -> "Play"
+                        },
+                        onClick = { if (playing != null) onToggle() else onPlay(book, position ?: 0.0) },
+                        leading = {
+                            Icon(
+                                if (playing?.isPlaying == true) PlayerIcons.Pause else PlayerIcons.Play,
+                                contentDescription = null, tint = Palette.Page, modifier = Modifier.size(18.dp),
+                            )
+                        },
+                    )
+                    if (playing != null) SleepControl(playing, onSleepTimer, Modifier.padding(start = 16.dp))
+                }
                 Spacer(Modifier.height(20.dp))
                 downloadSection()
             }

@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import dev.deanburgoyne.audiobooks.library.Cover
 import dev.deanburgoyne.audiobooks.playback.BookPlayer
 import dev.deanburgoyne.audiobooks.playback.NowPlaying
-import dev.deanburgoyne.audiobooks.playback.SleepTimer
 import dev.deanburgoyne.audiobooks.playback.formatClock
 import dev.deanburgoyne.audiobooks.ui.ControlButton
 import dev.deanburgoyne.audiobooks.ui.Palette
@@ -45,7 +44,6 @@ import dev.deanburgoyne.audiobooks.ui.formatRemaining
 import dev.deanburgoyne.audiobooks.ui.secondaryItalic
 
 private val Speeds = listOf(0.8f, 1.0f, 1.1f, 1.25f, 1.5f, 1.75f, 2.0f)
-private val SleepMinutes = listOf(15, 30, 45, 60)
 
 /**
  * The full player, in the web player's arrangement: the chapter title large, its
@@ -123,7 +121,8 @@ fun PlayerScreen(now: NowPlaying, coverUrl: String?, player: BookPlayer, onClose
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SleepControl(now, player::setSleepTimer)
+            // Buffering shows in the timer's place while no timer runs, as on the web.
+            SleepControl(now, player::setSleepTimer, idleLabel = if (now.isBuffering && now.isPlaying) "Loading…" else "Sleep timer")
             SpeedControl(now.speed, player::setSpeed)
         }
 
@@ -161,30 +160,6 @@ private fun SpeedControl(speed: Float, onSpeed: (Float) -> Unit) {
                         onClick = { onSpeed(s); open = false },
                     )
                 }
-            }
-        }
-    }
-}
-
-/** The sleep timer, as the status on the left edge: muted italic, tappable. */
-@Composable
-private fun SleepControl(now: NowPlaying, onTimer: (SleepTimer?) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    val label = when {
-        now.sleepAtChapterEnd -> "Sleeping at the chapter's end"
-        now.sleepRemainingSeconds != null -> "Sleeping in ${formatClock(now.sleepRemainingSeconds!!)}"
-        now.isBuffering && now.isPlaying -> "Loading…"
-        else -> "Sleep timer"
-    }
-    Box {
-        Text(label, style = secondaryItalic, modifier = Modifier.clickable { open = true }.padding(vertical = 6.dp))
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Palette.Cloth) {
-            SleepMinutes.forEach { m ->
-                DropdownMenuItem(text = { Text("In $m minutes") }, onClick = { onTimer(SleepTimer.After(m)); open = false })
-            }
-            DropdownMenuItem(text = { Text("At the end of this chapter") }, onClick = { onTimer(SleepTimer.EndOfChapter); open = false })
-            if (now.sleepAtChapterEnd || now.sleepRemainingSeconds != null) {
-                DropdownMenuItem(text = { Text("Off") }, onClick = { onTimer(null); open = false })
             }
         }
     }

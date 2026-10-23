@@ -133,6 +133,7 @@ fun LibraryHost(
                     onPlay = player::play,
                     onToggle = player::togglePlayPause,
                     onSeek = player::seekTo,
+                    onSleepTimer = player::setSleepTimer,
                     download = state.downloads[bookId],
                     wifiOnly = wifiOnly,
                     onDownload = { scope.launch { downloads.start(it) } },

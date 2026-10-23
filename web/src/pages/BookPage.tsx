@@ -5,6 +5,7 @@ import type { BookDetail } from '../api/types'
 import { Blurb } from '../components/Blurb'
 import { Cover } from '../components/Cover'
 import { BackIcon } from '../components/Icons'
+import { useMediaQuery } from '../components/useMediaQuery'
 import { authorHref, authorSlug } from '../library/authors'
 import { Player } from '../player/Player'
 
@@ -18,6 +19,11 @@ export function BookPage() {
 function BookView({ id }: { id: string }) {
   const [book, setBook] = useState<BookDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Desktop has room for the blurb beside the player, under the title. Below that
+  // the page is one column, and a blurb above the player pushed Play off the
+  // first screen, so there it comes after the player, before the chapters.
+  // Matches the CSS's two-column breakpoint.
+  const wide = useMediaQuery('(min-width: 64rem)')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -29,6 +35,8 @@ function BookView({ id }: { id: string }) {
       })
     return () => controller.abort()
   }, [id])
+
+  const blurb = book?.description ? <Blurb text={book.description} source={book.descriptionSource} /> : null
 
   return (
     <>
@@ -66,12 +74,12 @@ function BookView({ id }: { id: string }) {
               {book.narrator && <p className="muted">Read by {book.narrator}</p>}
               {book.credit && <p className="muted">{book.credit}</p>}
             </div>
-            {book.description && <Blurb text={book.description} source={book.descriptionSource} />}
+            {wide && blurb}
           </header>
           <div className="book-main">
             {/* The audio belongs to PlayerProvider; this is the book's controls,
                 live if it's the active book and idle otherwise. */}
-            <Player key={book.id} book={book} />
+            <Player key={book.id} book={book} beforeChapters={!wide && blurb} />
           </div>
         </article>
       )}
