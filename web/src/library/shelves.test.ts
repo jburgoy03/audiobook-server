@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { BookSummary } from '../api/types'
 import { groupByAuthor } from './authors'
 import type { BookStatus } from './search'
-import { dailySeed, recentlyAdded, shortListens, startSomethingNew, topAuthors } from './shelves'
+import { randomSeed, recentlyAdded, shortListens, startSomethingNew, topAuthors } from './shelves'
 
 const HOUR = 3600
 const book = (id: string, over: Partial<BookSummary> = {}): BookSummary => ({
@@ -75,8 +75,10 @@ describe('topAuthors', () => {
   })
 })
 
-describe('dailySeed', () => {
-  it('is the local date', () => {
-    expect(dailySeed(new Date(2026, 0, 5, 23, 30))).toBe('2026-01-05')
+describe('randomSeed', () => {
+  it('is 16 hex characters and differs between calls', () => {
+    const a = randomSeed()
+    expect(a).toMatch(/^[0-9a-f]{16}$/)
+    expect(randomSeed()).not.toBe(a)
   })
 })

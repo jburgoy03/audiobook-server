@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { AuthorCard } from '../components/AuthorCard'
 import { BookTile, LibraryNotice } from '../components/BookTiles'
@@ -7,7 +7,7 @@ import { groupByAuthor } from '../library/authors'
 import { ContinueShelf } from '../library/ContinueShelf'
 import { LIBRARY_PATH } from '../library/libraryQuery'
 import {
-  dailySeed,
+  randomSeed,
   recentlyAdded,
   SHORT_LISTEN_SECONDS,
   shortListens,
@@ -31,6 +31,10 @@ export function HomePage() {
   const { books, error } = useBooks()
   const { progress, entries } = useProgress(books)
   const activeId = useActiveBookId()
+  // Once per mount, not inside the memo below: that reruns whenever progress
+  // changes (every few seconds while something plays), which would reshuffle
+  // the row under the listener. A new visit or a reload gets a new order.
+  const [seed] = useState(randomSeed)
 
   const shelves = useMemo(() => {
     const all = books ?? []
@@ -38,14 +42,14 @@ export function HomePage() {
     const authors = groupByAuthor(all)
     return {
       recent,
-      fresh: startSomethingNew(all, statusOf, dailySeed(), new Set(recent.map((b) => b.id))),
+      fresh: startSomethingNew(all, statusOf, seed, new Set(recent.map((b) => b.id))),
       short: shortListens(all, statusOf),
       authors,
       topAuthors: topAuthors(authors),
     }
     // statusOf reads the progress store, whose snapshot is `entries`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [books, entries])
+  }, [books, entries, seed])
 
   // The library used to live here, so old links and bookmarks with a search or
   // filter (/?q=…) go on to where it lives now.

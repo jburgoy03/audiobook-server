@@ -8,11 +8,11 @@ import { compareBooks, type BookStatus } from './search'
  * progress store.
  *
  * Every shelf is a short row with a See all link into the full library, so none
- * of them needs to be complete, only a good first dozen.
+ * of them needs to be complete, only a good first screenful.
  */
 
-/** Books per shelf: two screens of a six-track row, about one on a phone. */
-export const SHELF_SIZE = 12
+/** Books per shelf: a little over three screens of a six-track row. */
+export const SHELF_SIZE = 20
 
 /**
  * What counts as a short listen. A heuristic: about a working day of
@@ -36,12 +36,14 @@ export function shortListens(books: readonly BookSummary[], statusOf: StatusOf, 
 }
 
 /**
- * Books nobody has started, in an order that changes once a day, so older books
- * come round instead of the same dozen sitting there. Leaves out books already
- * on another shelf (`exclude`), so the shelves don't repeat each other.
+ * Books nobody has started, in an order set by `seed`, so older books come
+ * round instead of the same ones sitting there. Leaves out books already on
+ * another shelf (`exclude`), so the shelves don't repeat each other.
  *
- * Daily rather than per visit: a row that reshuffles on every return is hard to
- * come back to ("it was here a minute ago").
+ * The home page passes a fresh randomSeed() each time it mounts, so the row
+ * reshuffles per visit. The tradeoff: a book you noticed may be gone when you
+ * come back ("it was here a minute ago"); See all lists every unstarted book.
+ * The seed stays a parameter so the order is deterministic in tests.
  */
 export function startSomethingNew(
   books: readonly BookSummary[],
@@ -63,10 +65,14 @@ export function topAuthors(authors: readonly Author[], size = SHELF_SIZE): Autho
   return byBookCount(authors).slice(0, size)
 }
 
-/** Today in local time, "2026-10-22": the seed for startSomethingNew. */
-export function dailySeed(now: Date = new Date()): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+/**
+ * A random seed for startSomethingNew. getRandomValues rather than
+ * randomUUID: randomUUID exists only in secure contexts, and the Tailscale
+ * address is plain HTTP.
+ */
+export function randomSeed(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(8))
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 /** FNV-1a, 32 bits. A shuffle key, not security. */
